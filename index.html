@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Content Journal — Atlanta</title>
+<meta name="description" content="A personal content journal and monthly idea calendar for Atlanta lifestyle creators.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍑</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">🍑</span>
+    <div>
+      <h1>Content Journal</h1>
+      <p class="brand-sub">Atlanta · lifestyle · food · home</p>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button class="tab is-active" data-view="week">This Week</button>
+    <button class="tab" data-view="library">Library</button>
+    <button class="tab" data-view="calendar">Calendar</button>
+    <button class="tab" data-view="events">My Events</button>
+    <button class="tab" data-view="settings">Settings</button>
+  </nav>
+  <div class="topbar-actions">
+    <button class="sync-chip" id="sync-chip" title="Sync status"><span class="sync-dot"></span><span id="sync-label">Local only</span></button>
+    <button class="btn btn-primary" id="btn-add">+ Add content</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============ THIS WEEK ============ -->
+  <section class="view is-active" id="view-week">
+    <div class="view-head">
+      <div>
+        <h2>This week</h2>
+        <p class="muted" id="week-sub">—</p>
+      </div>
+    </div>
+    <div id="week-schedule"></div>
+
+    <div class="view-head" style="margin-top:34px">
+      <div>
+        <h2>What to shoot next</h2>
+        <p class="muted">The dates and post types your library can't reach yet — and what would unlock them.</p>
+      </div>
+    </div>
+    <div id="week-gaps"></div>
+  </section>
+
+  <!-- ============ LIBRARY ============ -->
+  <section class="view" id="view-library">
+    <div class="view-head">
+      <div>
+        <h2>Your content library</h2>
+        <p class="muted" id="library-count">—</p>
+        <p class="muted-xs">Everything you've already shot. Tag it once, then let the calendar keep finding new ways to run it.</p>
+      </div>
+      <div class="view-head-actions">
+        <input type="search" id="search" class="input" placeholder="Search places, notes, tags…" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="filterbar">
+      <div class="filter-group">
+        <label class="filter-label">Type</label>
+        <div class="chipset" id="type-filters"></div>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">Reuse</label>
+        <div class="chipset" id="reuse-filters"></div>
+      </div>
+      <div class="filter-group grow">
+        <label class="filter-label">Tags <span class="muted-xs" id="tag-mode-hint"></span></label>
+        <div class="chipset" id="tag-filters"></div>
+      </div>
+    </div>
+
+    <div class="filterbar filterbar-secondary">
+      <div class="filter-group">
+        <label class="filter-label" for="sort-by">Sort</label>
+        <select id="sort-by" class="input input-sm">
+          <option value="stale">Most ready to reuse</option>
+          <option value="recent">Recently added</option>
+          <option value="name">Name A→Z</option>
+          <option value="lastPostedDesc">Most recently used</option>
+          <option value="mostUsed">Most reused</option>
+          <option value="leastUsed">Least reused</option>
+          <option value="deadline">Deadline soonest</option>
+          <option value="type">Type</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label" for="group-by">Group by</label>
+        <select id="group-by" class="input input-sm">
+          <option value="none">Nothing</option>
+          <option value="type">Type</option>
+          <option value="neighborhood">Neighborhood</option>
+          <option value="reuse">Reuse readiness</option>
+          <option value="tag">Tag</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">Tag match</label>
+        <div class="segmented" id="tag-match">
+          <button data-mode="any" class="is-active">Any</button>
+          <button data-mode="all">All</button>
+        </div>
+      </div>
+      <div class="filter-group push">
+        <button class="btn btn-ghost btn-sm" id="btn-clear-filters">Clear filters</button>
+      </div>
+    </div>
+
+    <div id="library-body"></div>
+  </section>
+
+  <!-- ============ CALENDAR ============ -->
+  <section class="view" id="view-calendar">
+    <div class="view-head">
+      <div>
+        <h2>Content calendar</h2>
+        <p class="muted" id="calendar-sub">—</p>
+      </div>
+      <div class="view-head-actions">
+        <button class="btn btn-ghost" id="btn-ai" title="Use Claude to write fresh themes, hooks and captions">✨ AI ideas</button>
+        <button class="btn btn-primary" id="btn-refresh">↻ Refresh calendar</button>
+      </div>
+    </div>
+
+    <div id="weather-strip" class="weather-strip" hidden></div>
+    <div id="gen-note" class="notice" hidden></div>
+
+    <div class="filterbar filterbar-secondary">
+      <div class="filter-group">
+        <label class="filter-label">Platforms</label>
+        <div class="chipset" id="cal-platform-toggles"></div>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">Format</label>
+        <div class="chipset" id="cal-format-toggles"></div>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">View</label>
+        <div class="segmented" id="cal-view">
+          <button data-mode="list" class="is-active">List</button>
+          <button data-mode="grid">Grid</button>
+        </div>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label" for="cal-status">Show</label>
+        <select id="cal-status" class="input input-sm">
+          <option value="active">Active ideas</option>
+          <option value="all">Everything (incl. dismissed)</option>
+          <option value="planned">Planned only</option>
+          <option value="done">Posted only</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label" for="cal-months">Horizon</label>
+        <select id="cal-months" class="input input-sm">
+          <option value="3">Next 3 months</option>
+          <option value="6" selected>Next 6 months</option>
+          <option value="12">Next 12 months</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="calendar-body"></div>
+  </section>
+
+  <!-- ============ EVENTS ============ -->
+  <section class="view" id="view-events">
+    <div class="view-head">
+      <div>
+        <h2>My events &amp; key dates</h2>
+        <p class="muted">Anything the generator should plan around — a restaurant opening, a trip, a brand deadline, a birthday.</p>
+      </div>
+      <div class="view-head-actions">
+        <button class="btn btn-primary" id="btn-add-event">+ Add event</button>
+      </div>
+    </div>
+    <div class="two-col">
+      <div>
+        <h3 class="section-title">Your events</h3>
+        <div id="events-body"></div>
+      </div>
+      <div>
+        <h3 class="section-title">Built-in Atlanta calendar</h3>
+        <p class="muted-xs">Baked in. The number shows how many places in your library actually fit each one — anything below the threshold is skipped rather than padded with unrelated spots. Untick anything you'll never cover.</p>
+        <div id="builtin-events-body"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section class="view" id="view-settings">
+    <div class="view-head">
+      <div><h2>Settings</h2><p class="muted">Sync, platform lanes, spacing, and the optional AI extras.</p></div>
+    </div>
+
+    <div class="panel" id="sync-panel">
+      <h3 class="section-title">☁️ Sync &amp; storage</h3>
+      <div id="sync-body"></div>
+    </div>
+
+    <div class="panel">
+      <h3 class="section-title">Manual backup</h3>
+      <p class="muted-xs">With sync on, you don't need this — your library is already safe in the cloud. It's here as an escape hatch: taking a copy before a big cleanup, or moving to a different setup entirely.</p>
+      <div class="row-actions">
+        <button class="btn" id="btn-export">⬇ Export backup</button>
+        <label class="btn" for="import-file">⬆ Import from file</label>
+        <input type="file" id="import-file" accept="application/json,.json" hidden>
+        <button class="btn" id="btn-import-text">📋 Paste a backup</button>
+        <button class="btn btn-ghost" id="btn-seed">Load sample data</button>
+        <button class="btn btn-danger-ghost" id="btn-wipe">Erase everything</button>
+      </div>
+      <p class="muted-xs" id="storage-stat"></p>
+    </div>
+
+    <div class="panel">
+      <h3 class="section-title">Where each type of content goes</h3>
+      <p class="muted-xs">The generator uses this to tag every idea with a platform. Change it any time.</p>
+      <div id="platform-matrix"></div>
+    </div>
+
+    <div class="panel">
+      <h3 class="section-title">Spacing rule</h3>
+      <p class="muted-xs">The hard floor. The same place will never be scheduled into two posts closer together than this — and it counts your real posting history too, not just what's on the calendar. If you move something by hand into a gap that's too tight, the calendar flags it rather than blocking you.</p>
+      <div class="settings-grid" id="gap-grid"></div>
+    </div>
+
+    <div class="panel">
+      <h3 class="section-title">Rollout across platforms</h3>
+      <p class="muted-xs">One concept doesn't go up everywhere at once — it rolls out over a few days. Pick which platform leads for each kind of content. Pinterest always goes last, since those pins link back to the video.</p>
+      <div id="rollout-grid"></div>
+      <div class="settings-grid">
+        <label>Days between each platform
+          <input type="number" id="pref-gap" class="input input-sm" min="0" max="30">
+        </label>
+        <label>Places needed before a roundup becomes a carousel
+          <input type="number" id="pref-carousel" class="input input-sm" min="2" max="12">
+        </label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3 class="section-title">Generator preferences</h3>
+      <div class="settings-grid">
+        <label>Ideas per month
+          <input type="number" id="pref-per-month" class="input input-sm" min="2" max="20">
+        </label>
+        <label>Days before content counts as ready to reuse
+          <input type="number" id="pref-cooldown" class="input input-sm" min="0" max="365">
+        </label>
+        <label>Preferred posting days
+          <div class="chipset" id="pref-days"></div>
+        </label>
+        <label class="checkline">
+          <input type="checkbox" id="pref-weather"> Show the live Atlanta forecast on the calendar
+        </label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3 class="section-title">✨ Claude AI ideas <span class="pill pill-quiet">optional</span></h3>
+      <p class="muted-xs">
+        The calendar works fully without this — the built-in Atlanta engine generates every idea on its own.
+        Adding an Anthropic API key lets the <strong>✨ AI ideas</strong> button write fresh themes, hooks and captions
+        on top of what you already have.
+      </p>
+      <div class="callout">
+        <strong>About your key:</strong> it is saved only in this browser, never in the GitHub repo, and never sent anywhere
+        except directly to Anthropic. Don't paste it into a shared or public computer. You can revoke it any time at
+        console.anthropic.com.
+      </div>
+      <div class="settings-grid">
+        <label>API key
+          <input type="password" id="ai-key" class="input input-sm" placeholder="sk-ant-…" autocomplete="off">
+        </label>
+        <label>Model
+          <select id="ai-model" class="input input-sm">
+            <option value="claude-sonnet-5">Claude Sonnet 5 — balanced (recommended)</option>
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fastest &amp; cheapest</option>
+            <option value="claude-opus-5">Claude Opus 5 — most thorough</option>
+          </select>
+        </label>
+        <label>Your voice / style notes (optional)
+          <textarea id="ai-voice" class="input input-sm" rows="3" placeholder="e.g. casual, funny, lots of 'okay but' openers, never use the word 'hidden gem'"></textarea>
+        </label>
+      </div>
+      <div class="row-actions">
+        <button class="btn" id="btn-ai-test">Test connection</button>
+        <span id="ai-test-result" class="muted-xs"></span>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ CONTENT MODAL ============ -->
+<div class="modal-backdrop" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3 id="modal-title">Add content</h3>
+      <button class="icon-btn" id="modal-close" aria-label="Close">✕</button>
+    </div>
+    <form id="content-form" class="modal-body" novalidate>
+      <input type="hidden" id="f-id">
+
+      <label class="field">
+        <span>Name <em>*</em></span>
+        <input type="text" id="f-name" class="input" required placeholder="e.g. Ladybird Grove &amp; Mess Hall">
+      </label>
+
+      <div class="field-row">
+        <label class="field">
+          <span>Type</span>
+          <select id="f-type" class="input">
+            <option value="restaurant">🍽 Restaurant / food</option>
+            <option value="experience">🎟 Experience / thing to do</option>
+            <option value="home">🏠 At-home / lifestyle</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Neighborhood</span>
+          <input type="text" id="f-neighborhood" class="input" list="neighborhood-list" placeholder="e.g. Old Fourth Ward">
+          <datalist id="neighborhood-list"></datalist>
+        </label>
+      </div>
+
+      <label class="field">
+        <span>Tags</span>
+        <div class="tag-input" id="tag-input-wrap">
+          <div class="tag-input-chips" id="f-tag-chips"></div>
+          <input type="text" id="f-tag-entry" class="tag-entry" placeholder="Type a tag and press Enter…" autocomplete="off">
+        </div>
+        <div class="tag-suggest" id="tag-suggest"></div>
+      </label>
+
+      <fieldset class="field">
+        <span class="field-legend">Where this works</span>
+        <div class="chipset" id="f-fit"></div>
+        <span class="field-hint">Tap to cycle: <strong>auto</strong> (follow your usual lanes) → <strong>always</strong> → <strong>never</strong>. Use "never" when something is a TikTok but not an Instagram post.</span>
+      </fieldset>
+
+      <label class="field">
+        <span>Notes about the place</span>
+        <textarea id="f-notes" class="input" rows="3" placeholder="What it's like, who it suits, what makes it worth featuring. The generator reads this when it decides which posts you belong in."></textarea>
+      </label>
+
+      <fieldset class="field" id="layers-field">
+        <span class="field-legend">Footage <span class="muted-xs" id="layers-count"></span></span>
+        <div id="layers-list"></div>
+        <button type="button" class="btn btn-sm" id="btn-add-layer">＋ Add footage</button>
+      </fieldset>
+
+      <label class="field">
+        <span>Link (optional)</span>
+        <input type="url" id="f-link" class="input" placeholder="https://">
+      </label>
+
+      <div class="modal-foot">
+        <button type="button" class="btn btn-danger-ghost" id="btn-delete" hidden>Delete</button>
+        <div class="push"></div>
+        <button type="button" class="btn btn-ghost" id="btn-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="btn-save">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ EVENT MODAL ============ -->
+<div class="modal-backdrop" id="event-modal" hidden>
+  <div class="modal modal-sm" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3 id="event-modal-title">Add event</h3>
+      <button class="icon-btn" id="event-modal-close" aria-label="Close">✕</button>
+    </div>
+    <form id="event-form" class="modal-body" novalidate>
+      <input type="hidden" id="e-id">
+      <label class="field"><span>Event name <em>*</em></span>
+        <input type="text" id="e-name" class="input" required placeholder="e.g. Sarah's restaurant opens"></label>
+      <div class="field-row">
+        <label class="field"><span>Date <em>*</em></span><input type="date" id="e-date" class="input"></label>
+        <label class="field"><span>Repeats yearly?</span>
+          <select id="e-repeat" class="input"><option value="no">No, one time</option><option value="yes">Yes, every year</option></select>
+        </label>
+      </div>
+      <label class="field"><span>What content angle?</span>
+        <input type="text" id="e-angle" class="input" placeholder="e.g. patio spots near the venue"></label>
+      <label class="field"><span>Match content tagged (comma separated, optional)</span>
+        <input type="text" id="e-tags" class="input" placeholder="e.g. patio, o4w, date night"></label>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-danger-ghost" id="e-delete" hidden>Delete</button>
+        <div class="push"></div>
+        <button type="button" class="btn btn-ghost" id="e-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save event</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ IDEA DETAIL MODAL ============ -->
+<div class="modal-backdrop" id="idea-modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3 id="idea-modal-title">Idea</h3>
+      <button class="icon-btn" id="idea-modal-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="idea-modal-body"></div>
+  </div>
+</div>
+
+<!-- ============ LAYER MODAL ============ -->
+<div class="modal-backdrop" id="layer-modal" hidden>
+  <div class="modal modal-sm" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3 id="layer-modal-title">Add footage</h3>
+      <button class="icon-btn" id="layer-close" aria-label="Close">✕</button>
+    </div>
+    <form id="layer-form" class="modal-body" novalidate>
+      <input type="hidden" id="l-item-id">
+      <input type="hidden" id="l-id">
+
+      <p class="muted-xs" id="l-context"></p>
+
+      <label class="field"><span>What is it? <em>*</em></span>
+        <input type="text" id="l-label" class="input" required placeholder="e.g. Fall patio visit, new brunch menu, cocktail close-ups">
+        <span class="field-hint">A short name so you can tell your clips apart later.</span>
+      </label>
+
+      <div class="field-row">
+        <label class="field"><span>Shot on <span class="field-hint" style="font-weight:400">optional</span></span>
+          <input type="date" id="l-captured" class="input">
+        </label>
+        <label class="field"><span>Times posted</span>
+          <input type="number" id="l-postcount" class="input" min="0" max="99" step="1" placeholder="0">
+          <span class="field-hint">Leave blank if never.</span>
+        </label>
+      </div>
+
+      <label class="field"><span>Last posted <span class="field-hint" style="font-weight:400">optional</span></span>
+        <input type="date" id="l-lastposted" class="input">
+        <span class="field-hint">Leave blank if this footage has never gone up. Every date field here can stay empty.</span>
+      </label>
+
+      <label class="field"><span>Notes</span>
+        <textarea id="l-notes" class="input" rows="2" placeholder="What's in it, what angle it suits, what you haven't used yet…"></textarea>
+      </label>
+
+      <label class="field"><span>Extra tags for this footage (comma separated)</span>
+        <input type="text" id="l-tags" class="input" placeholder="e.g. fall, cocktails, golden hour">
+      </label>
+
+      <div class="field deadline-block">
+        <label class="checkline">
+          <input type="checkbox" id="l-has-deadline">
+          <span>This footage needs to go up by a certain date</span>
+        </label>
+        <div class="deadline-fields" id="l-deadline-fields" hidden>
+          <label class="field"><span>Post by</span>
+            <input type="date" id="l-deadline" class="input"></label>
+          <label class="field"><span>Why? (shows on the calendar)</span>
+            <input type="text" id="l-deadline-note" class="input" placeholder="e.g. brand deal deliverable, seasonal menu ends"></label>
+          <label class="field"><span>Urgency</span>
+            <select id="l-priority" class="input">
+              <option value="normal">Normal — plan it in</option>
+              <option value="high">High — pin it near the top</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button type="button" class="btn btn-danger-ghost" id="l-delete" hidden>Delete</button>
+        <div class="push"></div>
+        <button type="button" class="btn btn-ghost" id="l-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save footage</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ RESCHEDULE MODAL ============ -->
+<div class="modal-backdrop" id="reschedule-modal" hidden>
+  <div class="modal modal-sm" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3>Reschedule</h3>
+      <button class="icon-btn" id="reschedule-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted-xs" id="reschedule-what"></p>
+
+      <label class="field">
+        <span>Move to</span>
+        <input type="date" id="reschedule-date" class="input">
+      </label>
+
+      <div class="field">
+        <span>Quick shifts</span>
+        <div class="chipset" id="reschedule-quick"></div>
+      </div>
+
+      <div id="reschedule-warning"></div>
+
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" id="reschedule-cancel">Cancel</button>
+        <span class="push"></span>
+        <button type="button" class="btn btn-primary" id="reschedule-save">Move it</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ BACKUP TEXT MODAL ============ -->
+<div class="modal-backdrop" id="text-modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3 id="text-modal-title">Backup</h3>
+      <button class="icon-btn" id="text-modal-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted-xs" id="text-modal-note"></p>
+      <textarea id="text-modal-area" class="input" rows="10" spellcheck="false" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px"></textarea>
+      <div class="modal-foot" id="text-modal-actions"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="src/config.js"></script>
+<script src="src/state.js"></script>
+<script src="src/cloud.js"></script>
+<script src="src/atlanta.js"></script>
+<script src="src/themes.js"></script>
+<script src="src/generator.js"></script>
+<script src="src/gaps.js"></script>
+<script src="src/ai.js"></script>
+<script src="src/ui-library.js"></script>
+<script src="src/ui-layers.js"></script>
+<script src="src/ui-week.js"></script>
+<script src="src/ui-calendar.js"></script>
+<script src="src/ui-events.js"></script>
+<script src="src/ui-settings.js"></script>
+<script src="src/ui-sync.js"></script>
+<script src="src/sync.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
