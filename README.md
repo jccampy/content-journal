@@ -17,6 +17,31 @@ library lives in a real database instead of a browser — see **SUPABASE-SETUP.m
 
 ## What it does
 
+**Quick add** — The fast way to fill the library. Hit **⚡ Quick add**, paste a list, and it
+works out the shape on its own. Three shapes all work:
+
+```
+Name: Le Bon Nosh                          ← full write-ups, blank line between each
+Neighborhood: Buckhead
+Tags: french, coffee, wine bar
+Notes: Market and wine bar in The Irby.
+Platforms: instagram, pinterest             ← naming some excludes the rest
+
+Bacchanalia | Westside | date night | Book ahead     ← one per line
+Ponce City Market | Old Fourth Ward | food hall
+
+Fox Bros Bar-B-Q                            ← or just names
+Piedmont Park — Midtown                     ← the suffix reads as the neighborhood
+```
+
+A spreadsheet paste works too — copy the cells, paste, and a header row is mapped by name.
+
+Everything shows in a **preview before anything is saved**, marked `new`, `update` or `skip`,
+with duplicates against your existing library already worked out. A date it can't read is
+flagged rather than quietly dropped. Merging into a place you already have never overwrites
+anything: new tags fold in, and new notes stack as another layer of footage. After it runs
+there's an **Undo** that removes only what it just added.
+
 **Library** — Every entry is a **place**, and footage stacks under it. Add a place once with
 its type, neighborhood, tags and notes; then every time you shoot there again, hit **＋ Add
 footage** to log another clip alongside the old ones. Nothing gets overwritten. Each clip
@@ -263,6 +288,7 @@ src/atlanta.js        Atlanta weather rhythm, holidays, recurring events
 src/themes.js         the 30 seasonal content recipes
 src/generator.js      the engine that turns library + calendar into dated ideas
 src/ai.js             optional Claude enrichment
+src/import.js         the bulk-paste parser behind Quick add
 src/ui-*.js           the views
 test/                 automated browser tests
 src/app.js            boot + tab routing

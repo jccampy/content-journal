@@ -94,3 +94,23 @@ Then re-enable Pages: Settings → Pages → Deploy from a branch → `main` →
 Open the app and check the sync chip in the top right says **Synced**. If it says
 **Local only**, the new files came up but your connection didn't — go to Settings → Sync and
 sign in again. Your library is still in the database either way.
+
+---
+
+## What's new in this update
+
+**⚡ Quick add** — a new button in the top bar, next to **+ Add content**. Paste a whole list
+of places at once instead of filling in the form one at a time.
+
+After updating, check it's there:
+
+1. Hard-refresh the site (`⌘ + Shift + R`).
+2. You should see **⚡ Quick add** between the sync chip and **+ Add content**.
+3. Click it, then **Show me an example** — a sample paste fills in and the preview on the
+   right fills up. Don't press Add; just close it. If the preview stays empty, `src/import.js`
+   or `src/ui-import.js` didn't upload — re-upload the `src` folder.
+
+Two new files ship in `src/` (`import.js`, `ui-import.js`) and one new test in `test/`
+(`import-test.js`). They come across with the folders in step 2, so there's nothing extra to do
+— but if you're picking files out by hand for any reason, those are the ones that must be
+there.

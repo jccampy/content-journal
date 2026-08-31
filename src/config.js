@@ -23,5 +23,5 @@ window.CJ.DEFAULT_CLOUD = {
 
   // 👇 Paste your publishable key between the quotes, then save.
   //    Supabase → Settings → API Keys. Starts with `sb_publishable_` or `eyJ`.
-  anonKey: 'sb_publishable_Wk4Jkpk04cZfQF2iuQjj2w_fNJEVj_6'
+  anonKey: ''
 };

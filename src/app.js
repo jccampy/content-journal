@@ -55,6 +55,7 @@
 
     CJ.library.init();
     CJ.layersUI.init();
+    CJ.importUI.init();
     CJ.weekUI.init();
     CJ.calendarUI.init();
     CJ.eventsUI.init();

@@ -279,7 +279,29 @@ window.CJ = window.CJ || {};
     listeners.forEach(function (fn) { try { fn(state); } catch (e) { console.error(e); } });
   }
 
-  function commit(immediate) { save(immediate); emit(); }
+  function commit(immediate) {
+    // Inside a batch, every commit collapses into one at the end. Adding forty
+    // places one at a time would otherwise save and re-render forty times,
+    // which is slow and makes the screen thrash.
+    if (batchDepth > 0) { batchDirty = true; return; }
+    save(immediate); emit();
+  }
+
+  var batchDepth = 0, batchDirty = false;
+
+  /**
+   * Run fn with saves and re-renders deferred to a single commit at the end.
+   * Nests safely. Commits if anything changed even when fn throws, so a
+   * half-finished import is still written down rather than silently lost.
+   */
+  function batch(fn) {
+    batchDepth++;
+    try { return fn(); }
+    finally {
+      batchDepth--;
+      if (batchDepth === 0 && batchDirty) { batchDirty = false; save(); emit(); }
+    }
+  }
 
   function subscribe(fn) { listeners.push(fn); }
 
@@ -956,6 +978,7 @@ window.CJ = window.CJ || {};
     load: load,
     save: save,
     commit: commit,
+    batch: batch,
     subscribe: subscribe,
     uid: uid,
     slug: slug,

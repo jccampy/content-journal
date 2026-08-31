@@ -442,7 +442,12 @@
       body.appendChild(el('div', { class: 'empty' }, [
         el('h3', { text: 'Start your archive' }),
         el('p', { text: 'Add everything you\'ve already shot — restaurants, experiences, at-home content. Tag each one with its neighborhood and vibe, and the calendar starts finding new ways to run footage you already have.' }),
-        el('button', { class: 'btn btn-primary', type: 'button', text: '+ Add your first place', onclick: function () { openForm(); } }),
+        el('div', { class: 'empty-actions' }, [
+          el('button', { class: 'btn btn-primary', type: 'button', text: '+ Add your first place', onclick: function () { openForm(); } }),
+          // Filling an archive one form at a time is the slow way in. Anyone
+          // starting from an existing list wants this button, not that one.
+          el('button', { class: 'btn', type: 'button', text: '⚡ Paste a whole list', onclick: function () { CJ.importUI.open(); } })
+        ]),
         el('p', { class: 'muted-xs', style: { marginTop: '14px' } }, ['Want to see how it works first? ']),
         el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Load sample data', onclick: function () { CJ.settingsUI.seed(); } })
       ]));

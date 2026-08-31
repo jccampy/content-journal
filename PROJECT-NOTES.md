@@ -48,9 +48,11 @@ src/atlanta.js     Atlanta weather rhythm, 21 holidays, ~37 recurring events
 src/themes.js      30 reuse recipes (the content "recipe book")
 src/generator.js   the engine: library + calendar → dated ideas
 src/ai.js          optional Claude enrichment
+src/import.js      bulk-paste parser (pure — no DOM, no state writes)
 src/ui-library.js  shared DOM helpers + library view + place form
 src/gaps.js        derives "what to shoot next" — no stored state
 src/ui-layers.js   add/edit a layer of footage
+src/ui-import.js   the Quick add screen (paste → preview → import)
 src/ui-week.js     This Week (the daily screen) + the content gap report
 src/ui-calendar.js calendar view, reschedule, idea detail
 src/ui-events.js   custom events + built-in event toggles
@@ -301,6 +303,12 @@ full recovery on a wiped browser. **Run this after any change to sync.js or clou
 
 `test/handoff-test.js` covers the setup-link handover to a second device.
 
+`test/import-test.js` covers Quick add: all three paste shapes, loose date parsing, duplicate
+detection, and the merge rules. **Run this after any change to import.js.** The parser is
+deliberately lenient, and lenient parsers drift — the assertions pin down both what it must
+recognise and what it must never do (swallow trailing commentary as notes, overwrite existing
+notes on a merge, silently drop a date it couldn't read).
+
 `test/browser-test.js` covers the full flow: empty state, seeding,
 adding with tags and deadlines, tag filtering, grouping, sorting, generation, plan/dismiss
 persistence across refresh, platform routing, custom events, the spacing rule (verified at both
@@ -311,10 +319,56 @@ mobile overflow.
 npm install playwright
 node test/browser-test.js
 node test/sync-test.js
+node test/import-test.js
 ```
 
 It starts its own static server and blocks the weather API for determinism. **Run it after any
 change to the generator** — the spacing assertions are the ones that catch real regressions.
+
+---
+
+## Quick add (bulk import)
+
+`src/import.js` is a three-stage pipeline, deliberately split:
+
+| Stage | Does | Touches state? |
+|---|---|---|
+| `parse(text, defaults)` | text → records | no |
+| `plan(records, opts)` | records → what would happen to each | reads only |
+| `apply(rows)` | writes them | yes, in one `CJ.batch` |
+
+The split is what makes the preview honest: the panel on the right of the modal renders the
+output of the *same* `plan()` the import runs. There is no second code path that could
+disagree with it.
+
+**Three paste shapes, auto-detected** (`parse` decides, `mode` is reported back to the UI):
+
+1. `blocks` — `Name:` / `Type:` / `Neighborhood:` / `Tags:` / `Notes:` records. This is what a
+   written-up entry looks like, so a batch can be pasted straight in, markdown stars and all.
+   A `---` line ends a record, which is what stops trailing commentary being read as notes.
+2. `table` — one place per line, split on tab or `|`. Tab-split is what a spreadsheet paste
+   looks like. A header row is detected and mapped; otherwise the order is positional:
+   `Name | Neighborhood | Tags | Notes`.
+3. `names` — bare names, one per line. `Bacchanalia — Westside` and `Miller Union (Westside)`
+   read the suffix as the neighborhood.
+
+**Rules that must not be loosened:**
+
+- A date that can't be parsed produces `null` **plus a warning on the record**, shown in the
+  preview. Never guess at one. A date that quietly vanishes is worse than one called out.
+- Merging never overwrites. New tags fold in; blank fields get filled; **existing notes are
+  never replaced** — new notes stack as another layer, the same rule as editing by hand.
+- `Platforms: instagram, pinterest` sets the unnamed platforms to `'no'`. Naming some means
+  excluding the rest, which is the only reading that makes the field worth having.
+- Duplicate key is `slug(name) + '@' + slug(neighborhood)`, so the three Henri's locations
+  stay three places while a re-paste of the same one is caught.
+
+`CJ.batch(fn)` in `state.js` defers save + re-render to a single commit at the end. Forty
+places added one at a time would otherwise save and re-render forty times. It commits even if
+`fn` throws, so a half-finished import is written down rather than lost.
+
+`apply()` returns `newIds`, which powers the Undo button in the result panel. Undo only ever
+deletes places the import created — anything merged into a place that already existed stays.
 
 ---
 
@@ -323,6 +377,7 @@ change to the generator** — the spacing assertions are the ones that catch rea
 | Decision | Why |
 |---|---|
 | No footage/production status | Everything in the library is already shot. Julia removed it explicitly. |
+| Bulk import previews before writing | Bulk actions are the ones you can't eyeball afterwards. Preview + Undo, always. |
 | Places hold layers, rather than one row per clip | She shoots the same place repeatedly and wants to add material without rewriting what's there. Spacing is about the place; freshness is about the clip. |
 | Spacing per platform, not global | Blocking a Pinterest pin because of an Instagram post would break the cross-posting rhythm. |
 | Skip an occasion rather than pad it | A wrong line-up is worse than a missing post. |

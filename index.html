@@ -30,6 +30,7 @@
   </nav>
   <div class="topbar-actions">
     <button class="sync-chip" id="sync-chip" title="Sync status"><span class="sync-dot"></span><span id="sync-label">Local only</span></button>
+    <button class="btn" id="btn-quick-add" title="Paste a whole list at once">⚡ Quick add</button>
     <button class="btn btn-primary" id="btn-add">+ Add content</button>
   </div>
 </header>
@@ -377,6 +378,78 @@
   </div>
 </div>
 
+<!-- ============ QUICK ADD (BULK) MODAL ============ -->
+<div class="modal-backdrop" id="import-modal" hidden>
+  <div class="modal modal-wide" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3>Quick add</h3>
+      <button class="icon-btn" id="import-close" aria-label="Close">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div id="imp-form-wrap">
+        <p class="muted-xs" style="margin-bottom:14px">
+          Paste a list of places — full write-ups, one per line, or just names.
+          It works out the shape on its own and shows you exactly what it read before anything is saved.
+        </p>
+
+        <div class="import-grid">
+          <div class="import-left">
+            <label class="field">
+              <span>Paste here</span>
+              <textarea id="imp-text" class="input import-textarea" rows="16" spellcheck="false"
+                placeholder="Name: Le Bon Nosh&#10;Neighborhood: Buckhead&#10;Tags: french, coffee, wine bar&#10;Notes: …&#10;&#10;— or —&#10;&#10;Bacchanalia | Westside | date night, tasting menu&#10;Ponce City Market | Old Fourth Ward | food hall, rooftop&#10;&#10;— or just —&#10;&#10;Fox Bros Bar-B-Q&#10;Krog Street Market"></textarea>
+            </label>
+
+            <div class="import-defaults">
+              <label class="field">
+                <span>Type, when not given</span>
+                <select id="imp-type" class="input input-sm">
+                  <option value="">Work it out</option>
+                  <option value="restaurant">🍽 Restaurant</option>
+                  <option value="experience">🎟 Experience</option>
+                  <option value="home">🏠 At-home</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Neighborhood, when not given</span>
+                <input type="text" id="imp-neighborhood" class="input input-sm" list="imp-neighborhood-list" placeholder="Leave blank">
+                <datalist id="imp-neighborhood-list"></datalist>
+              </label>
+              <label class="field">
+                <span>If it's already there</span>
+                <select id="imp-dupes" class="input input-sm">
+                  <option value="merge">Add what's new</option>
+                  <option value="skip">Leave it alone</option>
+                  <option value="new">Add a second entry</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="import-right">
+            <div class="import-preview-head">
+              <span class="field-legend">Preview</span>
+              <span class="muted-xs" id="imp-summary"></span>
+            </div>
+            <div id="imp-preview" class="import-preview"></div>
+          </div>
+        </div>
+
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost btn-sm" id="imp-example">Show me an example</button>
+          <span class="muted-xs" id="imp-counts"></span>
+          <div class="push"></div>
+          <button type="button" class="btn btn-ghost" id="imp-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary" id="imp-go" disabled>Add to library</button>
+        </div>
+      </div>
+
+      <div id="imp-result" hidden></div>
+    </div>
+  </div>
+</div>
+
 <!-- ============ EVENT MODAL ============ -->
 <div class="modal-backdrop" id="event-modal" hidden>
   <div class="modal modal-sm" role="dialog" aria-modal="true">
@@ -545,8 +618,10 @@
 <script src="src/generator.js"></script>
 <script src="src/gaps.js"></script>
 <script src="src/ai.js"></script>
+<script src="src/import.js"></script>
 <script src="src/ui-library.js"></script>
 <script src="src/ui-layers.js"></script>
+<script src="src/ui-import.js"></script>
 <script src="src/ui-week.js"></script>
 <script src="src/ui-calendar.js"></script>
 <script src="src/ui-events.js"></script>
