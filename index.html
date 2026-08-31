@@ -69,56 +69,64 @@
       </div>
     </div>
 
-    <div class="filterbar">
-      <div class="filter-group">
-        <label class="filter-label">Type</label>
-        <div class="chipset" id="type-filters"></div>
+    <!-- One bar. The three filters open as popovers so a library with 80 tags
+         doesn't push the actual content below the fold. -->
+    <div class="filterbar filterbar-one">
+      <div class="fpop" id="fpop-type">
+        <button class="fbtn" type="button" data-pop="type">Type <span class="fbtn-n" hidden></span> <span class="caret">▾</span></button>
+        <div class="pop-panel" hidden><div class="pop-body" id="type-filters"></div></div>
       </div>
-      <div class="filter-group">
-        <label class="filter-label">Reuse</label>
-        <div class="chipset" id="reuse-filters"></div>
-      </div>
-      <div class="filter-group grow">
-        <label class="filter-label">Tags <span class="muted-xs" id="tag-mode-hint"></span></label>
-        <div class="chipset" id="tag-filters"></div>
-      </div>
-    </div>
 
-    <div class="filterbar filterbar-secondary">
-      <div class="filter-group">
-        <label class="filter-label" for="sort-by">Sort</label>
-        <select id="sort-by" class="input input-sm">
-          <option value="stale">Most ready to reuse</option>
-          <option value="recent">Recently added</option>
-          <option value="name">Name A→Z</option>
-          <option value="lastPostedDesc">Most recently used</option>
-          <option value="mostUsed">Most reused</option>
-          <option value="leastUsed">Least reused</option>
-          <option value="deadline">Deadline soonest</option>
-          <option value="type">Type</option>
-        </select>
+      <div class="fpop" id="fpop-reuse">
+        <button class="fbtn" type="button" data-pop="reuse">Reuse <span class="fbtn-n" hidden></span> <span class="caret">▾</span></button>
+        <div class="pop-panel" hidden><div class="pop-body" id="reuse-filters"></div></div>
       </div>
-      <div class="filter-group">
-        <label class="filter-label" for="group-by">Group by</label>
-        <select id="group-by" class="input input-sm">
-          <option value="none">Nothing</option>
-          <option value="type">Type</option>
-          <option value="neighborhood">Neighborhood</option>
-          <option value="reuse">Reuse readiness</option>
-          <option value="tag">Tag</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label class="filter-label">Tag match</label>
-        <div class="segmented" id="tag-match">
-          <button data-mode="any" class="is-active">Any</button>
-          <button data-mode="all">All</button>
+
+      <div class="fpop" id="fpop-tags">
+        <button class="fbtn" type="button" data-pop="tags">Tags <span class="fbtn-n" hidden></span> <span class="caret">▾</span></button>
+        <div class="pop-panel pop-wide" hidden>
+          <div class="pop-head">
+            <input type="search" id="tag-search" class="input input-sm" placeholder="Find a tag…" autocomplete="off">
+            <div class="segmented segmented-sm" id="tag-match">
+              <button data-mode="any" class="is-active" type="button">Any</button>
+              <button data-mode="all" type="button">All</button>
+            </div>
+          </div>
+          <div class="pop-body pop-scroll" id="tag-filters"></div>
         </div>
       </div>
-      <div class="filter-group push">
-        <button class="btn btn-ghost btn-sm" id="btn-clear-filters">Clear filters</button>
+
+      <span class="fdiv"></span>
+
+      <select id="sort-by" class="input input-sm fsel" aria-label="Sort">
+        <option value="stale">Most ready to reuse</option>
+        <option value="recent">Recently added</option>
+        <option value="name">Name A→Z</option>
+        <option value="lastPostedDesc">Most recently used</option>
+        <option value="mostUsed">Most reused</option>
+        <option value="leastUsed">Least reused</option>
+        <option value="deadline">Deadline soonest</option>
+        <option value="type">Type</option>
+      </select>
+
+      <select id="group-by" class="input input-sm fsel" aria-label="Group by">
+        <option value="none">No grouping</option>
+        <option value="type">Group by type</option>
+        <option value="neighborhood">Group by neighborhood</option>
+        <option value="reuse">Group by readiness</option>
+        <option value="tag">Group by tag</option>
+      </select>
+
+      <div class="segmented segmented-sm" id="lib-view" title="Row height">
+        <button data-mode="rows" type="button" title="Compact rows">▤</button>
+        <button data-mode="cards" type="button" title="Cards">▦</button>
       </div>
+
+      <span class="push"></span>
+      <button class="btn btn-ghost btn-sm" id="btn-clear-filters" hidden>Clear</button>
     </div>
+
+    <div class="active-filters" id="active-filters" hidden></div>
 
     <div id="library-body"></div>
   </section>
@@ -337,14 +345,20 @@
         </label>
       </div>
 
-      <label class="field">
+      <!-- NOT a <label>. A label forwards any click inside it to its first
+           labelable descendant — which, once a tag chip exists, is that chip's
+           ✕ remove button. Clicking the box or a suggestion then silently
+           deleted the first tag. See PROJECT-NOTES. Keep this a <div>. -->
+      <div class="field">
         <span>Tags</span>
         <div class="tag-input" id="tag-input-wrap">
           <div class="tag-input-chips" id="f-tag-chips"></div>
-          <input type="text" id="f-tag-entry" class="tag-entry" placeholder="Type a tag and press Enter…" autocomplete="off">
+          <input type="text" id="f-tag-entry" class="tag-entry" aria-label="Add a tag"
+                 placeholder="Type a tag and press Enter…" autocomplete="off">
+          <button type="button" class="tag-add-btn" id="f-tag-add" title="Add this tag">＋</button>
         </div>
         <div class="tag-suggest" id="tag-suggest"></div>
-      </label>
+      </div>
 
       <fieldset class="field">
         <span class="field-legend">Where this works</span>

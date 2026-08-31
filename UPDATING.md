@@ -97,7 +97,7 @@ sign in again. Your library is still in the database either way.
 
 ---
 
-## What's new in this update
+## Earlier update
 
 **⚡ Quick add** — a new button in the top bar, next to **+ Add content**. Paste a whole list
 of places at once instead of filling in the form one at a time.
@@ -114,3 +114,48 @@ Two new files ship in `src/` (`import.js`, `ui-import.js`) and one new test in `
 (`import-test.js`). They come across with the folders in step 2, so there's nothing extra to do
 — but if you're picking files out by hand for any reason, those are the ones that must be
 there.
+
+---
+
+## What's new in this update
+
+**Two fixes and a rebuilt library page.**
+
+**1. The tag bug is fixed.** Adding a 4th tag used to delete one of the first
+three. The tag box was wrapped in a `<label>`, and a label passes any click
+inside it to the first button it contains — which, once you had a tag, was that
+tag's little ✕. So clicking the box to type again quietly removed a tag. You can
+now add as many as you like, and there's a **＋** button next to the field so you
+don't have to trust the return key on your phone. Typing `patio, rooftop, brunch`
+in one go adds all three, and tapping away keeps what you typed instead of
+throwing it out.
+
+**2. The library page is reorganised.**
+
+- **Rows instead of cards** — about 22 places on screen instead of 9. The
+  ▤ / ▦ buttons in the filter bar switch between them, and your choice follows
+  you to your other devices.
+- **One filter bar** — Type, Reuse and Tags are now buttons that open a panel.
+  The tag panel holds every tag, grouped, with a search box, so it stops eating
+  the top third of the page. Whatever you've filtered by shows as chips
+  underneath that you can click to remove.
+- **Each row tells you more** — three letters (T / I / P) show which platforms
+  that place is cleared for: lit means yes, faded means no, ringed means the
+  30-day rule is still blocking it. When it's blocked you get the date it's free
+  again. Deadlines show as a pill. The clip count opens the row for the detail.
+- **Cards are lighter** — that "Original footage / unused" box no longer
+  appears on every single card. It shows up when there's more than one clip, or
+  when a clip has a date on it.
+
+After updating, hard-refresh (`⌘ + Shift + R`) and check:
+
+1. The library shows compact rows with T / I / P letters on the right.
+2. Open **+ Add content**, type four tags. All four stay.
+3. Click **Tags** in the filter bar — a panel opens with a search box.
+
+If the rows look like plain unstyled text, `assets/styles.css` didn't upload.
+If the Tags button does nothing, `src/ui-library.js` didn't. Re-upload that
+folder.
+
+One new test file ships in `test/` (`library-test.js`). It comes across with the
+folder, so there's nothing extra to do.

@@ -42,7 +42,17 @@ flagged rather than quietly dropped. Merging into a place you already have never
 anything: new tags fold in, and new notes stack as another layer of footage. After it runs
 there's an **Undo** that removes only what it just added.
 
-**Library** — Every entry is a **place**, and footage stacks under it. Add a place once with
+**Library** — Two densities: compact **rows** (the default — about 22 places on
+screen) or **cards**, switched with the ▤ / ▦ buttons and remembered across your
+devices. Each row carries three letters — **T / I / P** — showing which platforms
+that place is cleared for: lit means yes, faded means no, ringed means the
+spacing rule is still blocking it, in which case the date it frees up is printed
+underneath. One filter bar holds everything: Type, Reuse and Tags open as
+panels (the tag panel has its own search box and lists every tag grouped by
+kind), with sort, grouping and the density toggle inline. Active filters appear
+as chips you can click to drop.
+
+Every entry is a **place**, and footage stacks under it. Add a place once with
 its type, neighborhood, tags and notes; then every time you shoot there again, hit **＋ Add
 footage** to log another clip alongside the old ones. Nothing gets overwritten. Each clip
 carries its own notes, its own usage history, and its own "needs to go up by" date. Every tag is

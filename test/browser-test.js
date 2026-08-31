@@ -91,12 +91,19 @@ const ok = (b) => (b ? '✓' : '✗ FAIL');
   console.log('layers stack, not overwrite:', ok(layers.length === 2), '|', layers.join(' + '));
 
   /* ---------- 3. filters, grouping ---------- */
+  // Type / Reuse / Tags each live behind a popover button in the one filter bar.
+  await page.click('#fpop-tags .fbtn');
+  await page.waitForTimeout(200);
   await page.locator('#tag-filters .tag', { hasText: 'patio' }).first().click();
   await page.waitForTimeout(300);
   console.log('tag filter:', await page.locator('#library-count').textContent());
+  await page.keyboard.press('Escape');
   await page.click('#btn-clear-filters');
   await page.waitForTimeout(200);
+  await page.click('#fpop-reuse .fbtn');
+  await page.waitForTimeout(200);
   console.log('reuse chips:', (await page.locator('#reuse-filters .chip').allTextContents()).join(' | '));
+  await page.keyboard.press('Escape');
   await page.selectOption('#group-by', 'reuse');
   await page.waitForTimeout(250);
   console.log('reuse groups:', (await page.locator('.group-head h3').allTextContents()).join(' | '));

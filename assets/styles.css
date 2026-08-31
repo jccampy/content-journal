@@ -60,6 +60,12 @@
 
 * { box-sizing: border-box; }
 
+/* `hidden` must beat every explicit display below. Without this, any element
+   given `display: flex` (a .btn, a modal backdrop) stays on screen after being
+   hidden in JS — which is how the modals once showed permanently, and how the
+   Clear button sat there with nothing to clear. */
+[hidden] { display: none !important; }
+
 html { background: var(--bg); color-scheme: light; }
 
 body {
@@ -654,8 +660,7 @@ input[type="date"].input { font-variant-numeric: tabular-nums; }
   display: flex; align-items: flex-start; justify-content: center;
   padding: 5vh 16px; overflow-y: auto;
 }
-/* `hidden` must win over the display rule above. */
-.modal-backdrop[hidden], .weather-strip[hidden], .notice[hidden] { display: none !important; }
+/* (the global [hidden] rule at the top of this file covers these) */
 
 .modal {
   background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-lg);
@@ -684,7 +689,14 @@ input[type="date"].input { font-variant-numeric: tabular-nums; }
 }
 .tag-input:focus-within { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
 .tag-input-chips { display: contents; }
-.tag-entry { border: 0; outline: 0; font: inherit; font-size: 13.5px; flex: 1; min-width: 150px; background: none; color: var(--ink); }
+.tag-entry { border: 0; outline: 0; font: inherit; font-size: 13.5px; flex: 1; min-width: 120px; background: none; color: var(--ink); }
+.tag-add-btn {
+  border: 1px solid var(--line-2); background: var(--surface-2); color: var(--accent-ink);
+  border-radius: 999px; width: 26px; height: 26px; flex: 0 0 auto;
+  font: inherit; font-size: 15px; line-height: 1; cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.tag-add-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
 .tag-chip {
   display: inline-flex; align-items: center; gap: 4px;
   font-size: 12px; font-weight: 600; padding: 2.5px 5px 2.5px 9px; border-radius: 999px;
@@ -814,3 +826,185 @@ input[type="date"].input { font-variant-numeric: tabular-nums; }
   .import-preview { min-height: 140px; max-height: 40vh; }
 }
 .empty-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+/* ==========================================================================
+   Library — one filter bar, compact rows
+   ========================================================================== */
+
+.filterbar-one {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 12px; margin-bottom: 10px;
+}
+.fdiv { width: 1px; align-self: stretch; background: var(--line); margin: 0 2px; }
+.fsel { max-width: 190px; }
+
+/* --- popover filters --- */
+.fpop { position: relative; }
+.fbtn {
+  display: inline-flex; align-items: center; gap: 5px;
+  font: inherit; font-size: 12.5px; font-weight: 500;
+  padding: 6px 11px; border-radius: 999px;
+  border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2);
+  cursor: pointer; transition: .12s; white-space: nowrap;
+}
+.fbtn:hover { border-color: var(--ink-3); color: var(--ink); }
+.fbtn.is-on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.fbtn .caret { font-size: 9px; opacity: .7; }
+.fbtn-n {
+  background: rgba(255,255,255,.28); border-radius: 999px; padding: 0 6px;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.fpop.is-open .fbtn { border-color: var(--accent); }
+
+.pop-panel {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+  background: var(--surface); border: 1px solid var(--line-2);
+  border-radius: var(--radius); box-shadow: var(--shadow-lg);
+  padding: 12px; min-width: 240px;
+}
+.pop-wide { min-width: 420px; max-width: min(560px, calc(100vw - 32px)); }
+.pop-head { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.pop-head .input { flex: 1; }
+.pop-body { display: flex; flex-direction: column; gap: 6px; }
+.pop-scroll { max-height: 48vh; overflow-y: auto; gap: 11px; }
+.pop-cat { display: flex; flex-direction: column; gap: 5px; }
+.pop-cat-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.segmented-sm button { padding: 3px 9px; font-size: 11.5px; }
+
+/* --- active filter chips --- */
+.active-filters {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  margin: -2px 0 12px; padding: 0 2px;
+}
+.af-label { font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
+.af-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: inherit; font-size: 12px; font-weight: 600;
+  background: var(--accent-soft); color: var(--accent-ink);
+  border: 1px solid var(--line-2); border-radius: 999px;
+  padding: 3px 8px 3px 11px; cursor: pointer;
+}
+.af-chip:hover { background: var(--surface-3); }
+.af-x { opacity: .55; font-size: 11px; }
+.af-chip:hover .af-x { opacity: 1; }
+
+/* --- compact rows --- */
+.row-list {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden;
+}
+.row-list > * + * { border-top: 1px solid var(--line); }
+
+.lib-row {
+  display: grid;
+  grid-template-columns: 26px minmax(150px, 1.6fr) minmax(0, 2fr) 178px 62px 52px auto;
+  align-items: center; gap: 10px;
+  padding: 7px 12px; min-height: 44px;
+  border-left: 3px solid transparent;
+}
+.lib-row:hover { background: var(--surface-2); }
+.lib-row.has-deadline { border-left-color: var(--amber); }
+.lib-row.overdue { border-left-color: var(--red); background: var(--red-soft); }
+.lib-row.is-open { background: var(--surface-2); }
+
+.row-emoji { font-size: 15px; text-align: center; }
+
+.row-name { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.row-title {
+  border: 0; background: none; font: inherit; font-size: 13.5px; font-weight: 700;
+  color: var(--ink); text-align: left; cursor: pointer; padding: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.row-title:hover { color: var(--accent-ink); text-decoration: underline; }
+.row-hood {
+  border: 0; background: none; padding: 0; font: inherit; font-size: 11.5px;
+  color: var(--ink-3); text-align: left; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.row-hood:hover { color: var(--violet); text-decoration: underline; }
+.row-hood.is-empty { cursor: default; opacity: .4; }
+
+/* Tags run out of room before the column does. Fade the overflow so a clipped
+   pill reads as deliberate rather than broken. */
+.row-tags {
+  display: flex; gap: 4px; flex-wrap: nowrap; overflow: hidden; min-width: 0;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+          mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+}
+.tag-more { background: var(--surface-2); color: var(--ink-3); }
+
+.row-status { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.row-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+.row-sub { font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Three platform dots: lit = cleared, dim = off, ring = waiting on the gap. */
+.plat-dots { display: flex; gap: 3px; }
+.pdot {
+  width: 18px; height: 18px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; letter-spacing: 0;
+  background: var(--surface-3); color: var(--ink-3); border: 1px solid transparent;
+}
+.pdot-tiktok { background: var(--olive-soft); color: var(--olive); }
+.pdot-instagram { background: var(--accent-soft); color: var(--accent-ink); }
+.pdot-pinterest { background: var(--violet-soft); color: var(--violet); }
+.pdot.is-off { opacity: .22; filter: grayscale(1); }
+.pdot.is-waiting { box-shadow: inset 0 0 0 1.5px var(--amber); opacity: .75; }
+.pdot.is-forced { border-color: currentColor; }
+
+.row-clips {
+  border: 1px solid transparent; background: none; font: inherit; font-size: 11px;
+  color: var(--ink-3); cursor: pointer; padding: 2px 6px; border-radius: 999px;
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.row-clips:hover { background: var(--surface-3); color: var(--ink-2); }
+.row-clips.is-on { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--line-2); }
+
+.row-actions { display: flex; gap: 2px; opacity: .55; transition: opacity .12s; }
+.lib-row:hover .row-actions, .lib-row.is-open .row-actions { opacity: 1; }
+.iconbtn {
+  border: 1px solid transparent; background: none; cursor: pointer;
+  width: 26px; height: 26px; border-radius: 7px; padding: 0;
+  font: inherit; font-size: 13px; line-height: 1; color: var(--ink-2);
+  display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
+}
+.iconbtn:hover { background: var(--surface-3); border-color: var(--line-2); color: var(--accent-ink); }
+
+.row-detail {
+  padding: 4px 14px 14px 51px; background: var(--surface-2);
+  display: flex; flex-direction: column; gap: 9px;
+}
+.row-detail-notes { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; margin: 0; }
+
+/* --- card view: the foot strip that replaced the repeated footage box --- */
+.item-foot { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.clip-count { font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 900px) {
+  /* Rows become two stacked lines rather than squeezing seven columns. */
+  .lib-row {
+    grid-template-columns: 24px 1fr auto auto;
+    grid-template-areas:
+      "emoji name  clips actions"
+      ".     tags  tags  tags"
+      ".     stat  plat  plat";
+    row-gap: 5px; padding: 9px 11px;
+  }
+  .row-emoji   { grid-area: emoji; }
+  .row-name    { grid-area: name; }
+  .row-tags    { grid-area: tags; flex-wrap: wrap; }
+  .row-status  { grid-area: stat; }
+  .plat-dots   { grid-area: plat; justify-content: flex-end; align-self: center; }
+  .row-clips   { grid-area: clips; }
+  .row-actions { grid-area: actions; opacity: 1; }
+  .row-detail  { padding-left: 14px; }
+  .fsel { max-width: none; flex: 1 1 140px; }
+  /* Anchor popovers to the whole bar rather than to their button, so a panel
+     opened from a button near the right edge can't hang off the screen. */
+  .filterbar-one { position: relative; }
+  .fpop { position: static; }
+  .pop-panel { left: 8px; right: 8px; width: auto; min-width: 0; max-width: none; }
+}

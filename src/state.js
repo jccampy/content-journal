@@ -44,6 +44,10 @@ window.CJ = window.CJ || {};
     carouselMinItems: 5,
 
     disabledBuiltinEvents: [],
+
+    /* 'rows' (compact) or 'cards'. A preference, so it syncs across devices. */
+    libraryView: 'rows',
+
     ai: { key: '', model: 'claude-sonnet-5', voice: '' }
   };
 

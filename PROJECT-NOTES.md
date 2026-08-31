@@ -65,6 +65,22 @@ src/app.js         boot, tab routing, render fan-out
 `ui-library.js` defines `CJ.ui` (the shared `$`, `el`, `toast`, `tagEl` helpers), so it must
 load before the other UI files.
 
+### Two traps worth knowing
+
+**Never wrap the tag widget in a `<label>`.** A `<label>` forwards any click
+inside it to its first labelable descendant. Once a tag chip existed, that
+descendant was the chip's ✕ remove button — so clicking the box, or a tag
+suggestion, silently deleted the first tag. Symptom as reported: "it won't let
+me add more than 3 tags, it replaces one of the others." The markup for
+`#tag-input-wrap` is a `<div class="field">` and must stay one; there's a
+comment in index.html saying so.
+
+**`[hidden]` needs `display: none !important`.** Anything given an explicit
+`display` (a `.btn`, a `.modal-backdrop`) ignores the `hidden` attribute
+otherwise. That's how the modals once showed permanently and how the Clear
+button sat there with nothing to clear. The global rule is at the top of
+`styles.css` — don't remove it.
+
 ### A trap worth knowing
 
 `CJ.state` is defined with `Object.defineProperty`, **not** inside the `Object.assign` block.
@@ -303,6 +319,11 @@ full recovery on a wiped browser. **Run this after any change to sync.js or clou
 
 `test/handoff-test.js` covers the setup-link handover to a second device.
 
+`test/library-test.js` covers the library view and the tag input. **Run this
+after any change to ui-library.js.** Half its assertions exist for the
+label-forwarding bug above — they click the box, click a suggestion, and check
+that nothing disappeared.
+
 `test/import-test.js` covers Quick add: all three paste shapes, loose date parsing, duplicate
 detection, and the merge rules. **Run this after any change to import.js.** The parser is
 deliberately lenient, and lenient parsers drift — the assertions pin down both what it must
@@ -320,10 +341,50 @@ npm install playwright
 node test/browser-test.js
 node test/sync-test.js
 node test/import-test.js
+node test/library-test.js
 ```
 
 It starts its own static server and blocks the weather API for determinism. **Run it after any
 change to the generator** — the spacing assertions are the ones that catch real regressions.
+
+---
+
+## The library view
+
+Two densities, toggled in the filter bar and stored as `settings.libraryView`
+so the choice syncs rather than being per-browser:
+
+- **rows** (default) — a seven-column grid, ~44px tall. About 22 places on a
+  1280×1400 screen against 9 for cards.
+- **cards** — the older layout, still there for browsing.
+
+**One filter bar.** Type, Reuse and Tags are popover buttons (`.fpop` >
+`.fbtn` + `.pop-panel`); sort, group, the density toggle and Clear sit inline.
+The tag popover holds *every* tag grouped by category with its own search box,
+so an 80-tag library no longer pushes the content below the fold. Whatever is
+active shows as removable chips in `#active-filters` underneath.
+
+Popover mechanics: a click inside `.pop-panel` calls `stopPropagation` so the
+document-level close handler doesn't fire — filtering is a repeated action, you
+should be able to pick three tags without reopening. On mobile the panel
+anchors to the whole bar (`.fpop { position: static }`) instead of to its
+button, so one opened from a right-hand button can't hang off screen.
+
+**What a row shows, and why.** Beyond name/neighborhood/tags:
+
+- `platformDots()` — T / I / P, lit when `itemAllowsPlatform` passes, dimmed
+  when it doesn't, ringed when the spacing rule is still blocking it. Letters,
+  not the platform emoji: at 18px three emoji are indistinguishable smudges.
+  This is the only place the per-place platform fit is visible at a glance.
+- `nextFreeAny()` — the date the spacing rule lifts, in the subline. The rule
+  was already being enforced silently; a place that looks available but isn't
+  was mystifying.
+- The soonest deadline across all its clips, as a pill.
+- Clip count, which expands the row into a detail panel with notes, fit and the
+  full footage strip.
+
+In cards, the footage strip now renders only when `layers.length > 1` or a clip
+carries a deadline. It used to appear on every card saying the same thing.
 
 ---
 

@@ -102,7 +102,127 @@
     group: 'none'
   };
 
-  var tagsExpanded = false;
+  var tagQuery = '';
+  var expanded = {};        // itemId -> row is showing its detail panel
+
+  function viewMode() {
+    return (CJ.settings().libraryView === 'cards') ? 'cards' : 'rows';
+  }
+
+  /* ---------- at-a-glance derivations (nothing stored) ---------- */
+
+  /**
+   * The first date this place could run again on a platform under the spacing
+   * rule. null means it's free now. This is the number the calendar is already
+   * enforcing silently — worth showing rather than leaving you to work out.
+   */
+  function nextFreeOn(item, platform) {
+    var last = CJ.lastPostedOn(item, platform);
+    if (!last) return null;
+    var gap = CJ.minGapFor(item);
+    if (!gap) return null;
+    var d = CJ.parseDate(last);
+    d.setDate(d.getDate() + gap);
+    return d > new Date() ? CJ.isoDate(d) : null;
+  }
+
+  /** The soonest deadline sitting on any clip, with its note. */
+  function deadlineOf(item) {
+    var best = null;
+    (item.layers || []).forEach(function (l) {
+      if (l.deadline && (!best || l.deadline < best.deadline)) best = l;
+    });
+    if (!best && item.deadline) best = { deadline: item.deadline, deadlineNote: item.deadlineNote, priority: item.priority };
+    return best;
+  }
+
+  /**
+   * Three dots — one per platform. Lit means this place is cleared for it,
+   * dimmed means it isn't, and a dot with a date under it is blocked by the
+   * spacing rule until then. Makes the "TikTok but not Instagram" rule visible
+   * in the library instead of buried in the edit form.
+   */
+  function platformDots(item) {
+    return el('div', { class: 'plat-dots' }, CJ.PLATFORMS.map(function (p) {
+      var allowed = CJ.itemAllowsPlatform(item, p.id);
+      var fit = CJ.fitFor(item, p.id);
+      var free = allowed ? nextFreeOn(item, p.id) : null;
+      var title = p.label + ': ' +
+        (!allowed ? (fit === 'no' ? 'switched off for this place' : 'not one of your usual lanes for ' + typeInfo(item.type).label.toLowerCase())
+         : free ? 'blocked by the ' + CJ.minGapFor(item) + '-day rule until ' + CJ.formatDate(free, { month: 'short', day: 'numeric' })
+         : 'free to use');
+      // A letter, not the platform emoji — at 18px an emoji is a smudge and
+      // all three read the same. T / I / P stay distinct.
+      return el('span', {
+        class: 'pdot pdot-' + p.id + (allowed ? '' : ' is-off') + (free ? ' is-waiting' : '') +
+               (fit === 'yes' ? ' is-forced' : ''),
+        title: title, text: p.label.charAt(0).toUpperCase()
+      });
+    }));
+  }
+
+  /** "8mo ago" — the row subline has no room for the long form. */
+  function shortAgo(iso) {
+    if (!iso) return null;
+    var d = CJ.daysSince(iso);
+    if (d < 0) return 'scheduled';
+    if (d === 0) return 'today';
+    if (d === 1) return 'yesterday';
+    if (d < 45) return d + 'd ago';
+    if (d < 365) return Math.round(d / 30) + 'mo ago';
+    return (d / 365).toFixed(1).replace(/\.0$/, '') + 'y ago';
+  }
+
+  /** The soonest date this place is free again on any lane it's cleared for. */
+  function nextFreeAny(item) {
+    var best = null, blocked = 0, allowed = 0;
+    CJ.PLATFORMS.forEach(function (p) {
+      if (!CJ.itemAllowsPlatform(item, p.id)) return;
+      allowed++;
+      var f = nextFreeOn(item, p.id);
+      if (!f) { best = 'now'; return; }
+      blocked++;
+      if (best !== 'now' && (!best || f < best)) best = f;
+    });
+    if (!allowed || best === 'now' || !blocked) return null;
+    return best;
+  }
+
+  function statusCell(item) {
+    var reuse = CJ.reuseInfo(CJ.reuseState(item));
+    var dl = deadlineOf(item);
+    var bits = [el('span', {
+      class: 'pill ' + (reuse.id === 'recent' ? 'pill-quiet' : 'pill-good'),
+      text: reuse.emoji + ' ' + reuse.label, title: reuse.hint
+    })];
+
+    if (dl) {
+      var left = CJ.daysBetween(new Date(), CJ.parseDate(dl.deadline));
+      bits.push(el('span', {
+        class: 'pill ' + (left < 3 ? 'pill-danger' : 'pill-warn'),
+        text: '⏰ ' + (left < 0 ? 'overdue ' + Math.abs(left) + 'd'
+                     : left === 0 ? 'due today'
+                     : CJ.formatDate(dl.deadline, { month: 'short', day: 'numeric' })),
+        title: dl.deadlineNote || 'Needs to go up by this date'
+      }));
+    }
+
+    var used = item.postCount || 0;
+    var parts = [];
+    if (used) {
+      var ago = shortAgo(item.lastPosted);
+      parts.push(ago ? ago + ' · ' + used + '×' : 'used ' + used + '×');
+    }
+    // The spacing rule is a hard floor the calendar enforces silently. Say when
+    // it lifts, so a place that looks available but isn't stops being a mystery.
+    var free = nextFreeAny(item);
+    if (free) parts.push('free ' + CJ.formatDate(free, { month: 'short', day: 'numeric' }));
+
+    return el('div', { class: 'row-status' }, [
+      el('div', { class: 'row-pills' }, bits),
+      parts.length ? el('span', { class: 'row-sub', text: parts.join(' · ') }) : null
+    ]);
+  }
 
   function matchesFilters(item) {
     if (filters.types.length && filters.types.indexOf(item.type) === -1) return false;
@@ -224,6 +344,103 @@
     return 'last used ' + (d / 365).toFixed(1) + ' years ago';
   }
 
+  /** Up to `max` tag pills, then a quiet "+N". */
+  function tagCell(item, max) {
+    var tags = item.tags || [];
+    if (!tags.length) return el('div', { class: 'row-tags' }, [el('span', { class: 'muted-xs', text: 'no tags yet' })]);
+    var shown = tags.slice(0, max);
+    var kids = shown.map(function (tg) {
+      return tagEl(tg, { active: filters.tags.indexOf(tg) !== -1, onclick: function (t) { toggleTagFilter(t); } });
+    });
+    if (tags.length > max) {
+      kids.push(el('button', {
+        class: 'tag tag-more', type: 'button', text: '+' + (tags.length - max),
+        title: tags.slice(max).join(', '),
+        onclick: function (e) { e.stopPropagation(); openForm(item.id); }
+      }));
+    }
+    return el('div', { class: 'row-tags' }, kids);
+  }
+
+  function rowActions(item) {
+    return el('div', { class: 'row-actions' }, [
+      el('button', {
+        class: 'iconbtn', type: 'button', text: '＋', title: 'Add footage for this place',
+        onclick: function (e) { e.stopPropagation(); CJ.layersUI.open(item.id); }
+      }),
+      el('button', {
+        class: 'iconbtn', type: 'button', text: '✎', title: 'Edit',
+        onclick: function (e) { e.stopPropagation(); openForm(item.id); }
+      }),
+      item.link ? el('a', {
+        class: 'iconbtn', href: item.link, target: '_blank', rel: 'noopener', text: '↗', title: item.link,
+        onclick: function (e) { e.stopPropagation(); }
+      }) : null
+    ]);
+  }
+
+  /** The compact row. Six aligned columns, ~44px tall. */
+  function itemRow(item) {
+    var t = typeInfo(item.type);
+    var dl = deadlineOf(item);
+    var clips = (item.layers || []).length;
+    var isOpen = !!expanded[item.id];
+
+    var cls = ['lib-row'];
+    if (dl) cls.push(CJ.parseDate(dl.deadline) < new Date() ? 'overdue' : 'has-deadline');
+    if (isOpen) cls.push('is-open');
+
+    var row = el('div', { class: cls.join(' ') }, [
+      el('span', { class: 'row-emoji', title: t.label, text: t.emoji }),
+
+      el('div', { class: 'row-name' }, [
+        el('button', { class: 'row-title', type: 'button', text: item.name, onclick: function () { openForm(item.id); } }),
+        item.neighborhood
+          ? el('button', {
+              class: 'row-hood', type: 'button', text: item.neighborhood,
+              title: 'Filter to ' + item.neighborhood,
+              onclick: function (e) { e.stopPropagation(); toggleTagFilter(item.neighborhood); }
+            })
+          : el('span', { class: 'row-hood is-empty', text: '—' })
+      ]),
+
+      tagCell(item, 4),
+      statusCell(item),
+      platformDots(item),
+
+      el('button', {
+        class: 'row-clips' + (isOpen ? ' is-on' : ''), type: 'button',
+        title: clips + ' clip' + (clips === 1 ? '' : 's') + ' on file — click for detail',
+        text: '🎬 ' + clips,
+        onclick: function (e) {
+          e.stopPropagation();
+          if (expanded[item.id]) delete expanded[item.id]; else expanded[item.id] = true;
+          render();
+        }
+      }),
+
+      rowActions(item)
+    ]);
+
+    if (!isOpen) return row;
+
+    return el('div', { class: 'lib-row-wrap' }, [
+      row,
+      el('div', { class: 'row-detail' }, [
+        item.notes ? el('p', { class: 'row-detail-notes', text: item.notes }) : null,
+        fitRow(item),
+        layerStrip(item),
+        el('div', { class: 'item-actions' }, [
+          el('button', {
+            class: 'btn btn-ghost btn-sm', type: 'button', text: '＋ Add footage',
+            onclick: function () { CJ.layersUI.open(item.id); }
+          }),
+          el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Edit place', onclick: function () { openForm(item.id); } })
+        ])
+      ])
+    ]);
+  }
+
   function itemCard(item) {
     var t = typeInfo(item.type);
     var reuse = CJ.reuseInfo(CJ.reuseState(item));
@@ -264,6 +481,12 @@
       });
     }
 
+    // The footage strip used to appear on every card saying the same thing.
+    // It only earns its space when there's more than one clip, or a clip has a
+    // date on it — otherwise the reuse pill above already told you.
+    var layers = item.layers || [];
+    var stripWorthIt = layers.length > 1 || layers.some(function (l) { return l.deadline; });
+
     return el('div', { class: classes.join(' ') }, [
       el('div', { class: 'item-top' }, [
         el('span', { class: 'item-emoji', text: t.emoji }),
@@ -275,20 +498,17 @@
       el('div', { class: 'item-meta' }, meta),
       (item.tags && item.tags.length)
         ? el('div', { class: 'tag-row' }, item.tags.map(function (tg) {
-            return tagEl(tg, { active: filters.tags.indexOf(tg) !== -1 });
+            return tagEl(tg, { active: filters.tags.indexOf(tg) !== -1, onclick: function (t) { toggleTagFilter(t); } });
           }))
         : null,
       item.notes ? el('div', { class: 'item-notes', text: item.notes }) : null,
       fitRow(item),
-      layerStrip(item),
-      el('div', { class: 'item-actions' }, [
-        el('button', {
-          class: 'btn btn-ghost btn-sm', type: 'button', text: '＋ Add footage',
-          title: 'Log new material for this place without touching what\'s already here',
-          onclick: function () { CJ.layersUI.open(item.id); }
-        }),
-        el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Edit', onclick: function () { openForm(item.id); } }),
-        item.link ? el('a', { class: 'btn btn-ghost btn-sm', href: item.link, target: '_blank', rel: 'noopener', text: '↗ Link' }) : null
+      stripWorthIt ? layerStrip(item) : null,
+      el('div', { class: 'item-foot' }, [
+        platformDots(item),
+        el('span', { class: 'clip-count', text: '🎬 ' + layers.length + ' clip' + (layers.length === 1 ? '' : 's') }),
+        el('span', { class: 'push' }),
+        rowActions(item)
       ])
     ]);
   }
@@ -364,46 +584,119 @@
       }, [r.emoji + ' ' + r.label, el('span', { class: 'chip-count', text: String(n) })]));
     });
 
+    // Every tag, grouped by category, inside the popover. No truncation — the
+    // panel scrolls and has its own search box, so length stops being a problem.
     var tagBox = $('#tag-filters');
     tagBox.innerHTML = '';
     var tags = CJ.allTags(true);
     if (!tags.length) {
-      tagBox.appendChild(el('span', { class: 'muted-xs', text: 'Tags you add will show up here — click any of them to group your content.' }));
+      tagBox.appendChild(el('span', { class: 'muted-xs', text: 'Tags you add will show up here.' }));
     } else {
-      // Group tags by category so neighborhoods sit together, vibes together, etc.
       var byCat = {};
       tags.forEach(function (t) { (byCat[t.category] = byCat[t.category] || []).push(t); });
-      var ordered = [];
+      var q = tagQuery.toLowerCase();
+      var any = false;
+
       CJ.TAG_CATEGORIES.forEach(function (cat) {
-        (byCat[cat.id] || []).forEach(function (t) { ordered.push(t); });
+        var list = (byCat[cat.id] || []).filter(function (t) {
+          return !q || t.tag.toLowerCase().indexOf(q) !== -1;
+        });
+        if (!list.length) return;
+        any = true;
+        tagBox.appendChild(el('div', { class: 'pop-cat' }, [
+          el('span', { class: 'pop-cat-label', text: cat.label }),
+          el('div', { class: 'chipset' }, list.map(function (t) {
+            return tagEl(t.tag, {
+              count: t.count,
+              active: filters.tags.indexOf(t.tag) !== -1,
+              onclick: function (tag) { toggleTagFilter(tag); }
+            });
+          }))
+        ]));
       });
-
-      // Long tag lists swallow the page. Collapsed shows the most-used tags;
-      // expanded shows everything, grouped by category. Selected tags always show.
-      var LIMIT = 26;
-      var collapsed = !tagsExpanded && ordered.length > LIMIT;
-      var shownTags = collapsed
-        ? tags.filter(function (t, i) { return i < LIMIT || filters.tags.indexOf(t.tag) !== -1; })
-        : ordered;
-
-      shownTags.forEach(function (t) {
-        tagBox.appendChild(tagEl(t.tag, {
-          count: t.count,
-          active: filters.tags.indexOf(t.tag) !== -1,
-          onclick: function (tag) { toggleTagFilter(tag); }
-        }));
-      });
-
-      if (ordered.length > LIMIT) {
-        tagBox.appendChild(el('button', {
-          class: 'chip', type: 'button',
-          text: collapsed ? '+ ' + (ordered.length - shownTags.length) + ' more tags' : '− show fewer',
-          onclick: function () { tagsExpanded = !tagsExpanded; render(); }
-        }));
-      }
+      if (!any) tagBox.appendChild(el('span', { class: 'muted-xs', text: 'No tag matches "' + tagQuery + '".' }));
     }
-    $('#tag-mode-hint').textContent = filters.tags.length
-      ? '· ' + filters.tags.length + ' selected (' + filters.tagMode + ')' : '';
+
+    // Counts on the buttons themselves, so a collapsed filter is never invisible.
+    setBadge('type', filters.types.length);
+    setBadge('reuse', filters.reuse.length);
+    setBadge('tags', filters.tags.length);
+
+    renderActiveFilters();
+  }
+
+  function setBadge(which, n) {
+    var b = $('#fpop-' + which + ' .fbtn');
+    var badge = b.querySelector('.fbtn-n');
+    badge.textContent = n ? String(n) : '';
+    badge.hidden = !n;
+    b.classList.toggle('is-on', !!n);
+  }
+
+  /** Whatever is currently narrowing the list, as removable chips. */
+  function renderActiveFilters() {
+    var box = $('#active-filters');
+    box.innerHTML = '';
+    var bits = [];
+
+    filters.types.forEach(function (id) {
+      bits.push({ label: typeInfo(id).emoji + ' ' + typeInfo(id).label, off: function () { toggle(filters.types, id); } });
+    });
+    filters.reuse.forEach(function (id) {
+      var r = CJ.reuseInfo(id);
+      bits.push({ label: r.emoji + ' ' + r.label, off: function () { toggle(filters.reuse, id); } });
+    });
+    filters.tags.forEach(function (t) {
+      bits.push({ label: t, off: function () { toggle(filters.tags, t); } });
+    });
+    if (filters.q) bits.push({ label: '“' + filters.q + '”', off: function () { filters.q = ''; $('#search').value = ''; } });
+
+    var on = bits.length > 0;
+    box.hidden = !on;
+    $('#btn-clear-filters').hidden = !on;
+    if (!on) return;
+
+    if (filters.tags.length > 1) {
+      box.appendChild(el('span', { class: 'af-label', text: 'matching ' + filters.tagMode + ' of:' }));
+    }
+    bits.forEach(function (b) {
+      box.appendChild(el('button', {
+        class: 'af-chip', type: 'button', title: 'Remove this filter',
+        onclick: function () { b.off(); render(); }
+      }, [b.label, el('span', { class: 'af-x', text: '✕' })]));
+    });
+  }
+
+  /* ---------- popovers ---------- */
+
+  function closePops(except) {
+    $$('.fpop').forEach(function (p) {
+      if (p === except) return;
+      p.querySelector('.pop-panel').hidden = true;
+      p.classList.remove('is-open');
+    });
+  }
+
+  function initPops() {
+    $$('.fpop').forEach(function (pop) {
+      var btn = pop.querySelector('.fbtn');
+      var panel = pop.querySelector('.pop-panel');
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var willOpen = panel.hidden;
+        closePops(pop);
+        panel.hidden = !willOpen;
+        pop.classList.toggle('is-open', willOpen);
+        if (willOpen && pop.id === 'fpop-tags') {
+          setTimeout(function () { $('#tag-search').focus(); }, 30);
+        }
+      });
+      // Clicks inside the panel must not fall through to the document handler
+      // that closes it — filtering is a repeated action, not a one-shot.
+      panel.addEventListener('click', function (e) { e.stopPropagation(); });
+    });
+    document.addEventListener('click', function () { closePops(null); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePops(null); });
   }
 
   function toggle(arr, v) {
@@ -419,13 +712,19 @@
 
   function clearFilters() {
     filters.q = ''; filters.types = []; filters.reuse = []; filters.tags = [];
+    tagQuery = '';
     $('#search').value = '';
+    if ($('#tag-search')) $('#tag-search').value = '';
     render();
   }
 
   function render() {
     if (!CJ.state) return;
     renderFilterChips();
+
+    $$('#lib-view button').forEach(function (b) {
+      b.classList.toggle('is-active', b.getAttribute('data-mode') === viewMode());
+    });
 
     var all = CJ.getItems();
     var shown = all.filter(matchesFilters);
@@ -471,7 +770,9 @@
           el('span', { class: 'count', text: g.items.length + ' item' + (g.items.length === 1 ? '' : 's') })
         ]));
       }
-      block.appendChild(el('div', { class: 'card-grid' }, g.items.map(itemCard)));
+      block.appendChild(viewMode() === 'cards'
+        ? el('div', { class: 'card-grid' }, g.items.map(itemCard))
+        : el('div', { class: 'row-list' }, g.items.map(itemRow)));
       body.appendChild(block);
     });
   }
@@ -512,16 +813,36 @@
     });
   }
 
+  /**
+   * Add one or more tags. Accepts "patio, date night" in a single go, so a
+   * pasted or typed list doesn't have to be broken up by hand.
+   */
   function addFormTag(raw) {
-    var t = String(raw).trim().replace(/,$/, '');
-    if (!t) return;
-    // Snap to however this tag is already spelled in the library, so "Group
-    // friendly" and "group friendly" never become two separate tags.
-    t = CJ.canonicalTag(t);
-    if (!t) return;
-    if (formTags.some(function (x) { return CJ.tagKey(x) === CJ.tagKey(t); })) return;
-    formTags.push(t);
+    var added = false;
+    String(raw == null ? '' : raw).split(/[,;]/).forEach(function (part) {
+      var t = part.trim().replace(/^#/, '');
+      if (!t) return;
+      // Snap to however this tag is already spelled in the library, so "Group
+      // friendly" and "group friendly" never become two separate tags.
+      t = CJ.canonicalTag(t);
+      if (!t) return;
+      if (formTags.some(function (x) { return CJ.tagKey(x) === CJ.tagKey(t); })) return;
+      formTags.push(t);
+      added = true;
+    });
+    if (!added) return;
     renderFormTags();
+    renderTagSuggestions('');
+  }
+
+  /** Commit whatever is sitting in the entry box. Safe to call repeatedly. */
+  function commitPendingTag() {
+    var entry = $('#f-tag-entry');
+    if (!entry) return;
+    var v = entry.value.trim();
+    if (!v) return;
+    addFormTag(v);
+    entry.value = '';
     renderTagSuggestions('');
   }
 
@@ -613,8 +934,7 @@
     if (!name) { toast('Give it a name first.', 'error'); return; }
 
     // Sweep up anything half-typed in the tag box.
-    var pending = $('#f-tag-entry').value.trim();
-    if (pending) { addFormTag(pending); $('#f-tag-entry').value = ''; }
+    commitPendingTag();
 
     var isNew = !$('#f-id').value;
 
@@ -664,16 +984,38 @@
 
     var entry = $('#f-tag-entry');
     entry.addEventListener('keydown', function (e) {
+      // 229 is the keyCode phone keyboards send while autocorrect is still
+      // composing a word; the real key arrives later. Ignoring it here means
+      // the keyup fallback below is what commits the tag on a phone.
+      if (e.keyCode === 229 || e.isComposing) return;
       if (e.key === 'Enter' || e.key === ',') {
         e.preventDefault();
-        addFormTag(entry.value);
-        entry.value = '';
-        renderTagSuggestions('');
+        commitPendingTag();
       } else if (e.key === 'Backspace' && !entry.value && formTags.length) {
         formTags.pop(); renderFormTags();
       }
     });
+    // Backstop for keyboards whose keydown didn't carry a usable key.
+    entry.addEventListener('keyup', function (e) {
+      if (e.key === 'Enter' && entry.value.trim()) commitPendingTag();
+    });
+    // Tapping away should keep what you typed, not throw it out.
+    entry.addEventListener('blur', function () { setTimeout(commitPendingTag, 120); });
     entry.addEventListener('input', function () { renderTagSuggestions(entry.value.trim()); });
+
+    // A visible button, because "press Enter" is not obvious and a phone's
+    // return key can't always be trusted to reach us.
+    $('#f-tag-add').addEventListener('click', function () {
+      commitPendingTag();
+      entry.focus();
+    });
+
+    // The box used to be wrapped in a <label>, which focused the entry for
+    // free. It isn't any more (that forwarding was deleting tags), so do it
+    // explicitly — but only for clicks on the box itself, never on a chip.
+    $('#tag-input-wrap').addEventListener('mousedown', function (e) {
+      if (e.target === this) { e.preventDefault(); entry.focus(); }
+    });
 
     $('#search').addEventListener('input', function () { filters.q = this.value.trim(); render(); });
     $('#sort-by').addEventListener('change', function () { filters.sort = this.value; render(); });
@@ -685,6 +1027,19 @@
         $$('#tag-match button').forEach(function (x) { x.classList.remove('is-active'); });
         b.classList.add('is-active');
         filters.tagMode = b.getAttribute('data-mode');
+        render();
+      });
+    });
+
+    initPops();
+
+    $('#tag-search').addEventListener('input', function () { tagQuery = this.value.trim(); renderFilterChips(); });
+
+    // Rows vs cards is a preference, so it lives in settings and follows you
+    // to your other devices rather than being per-browser.
+    $$('#lib-view button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        CJ.updateSettings({ libraryView: b.getAttribute('data-mode') });
         render();
       });
     });
