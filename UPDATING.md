@@ -117,7 +117,7 @@ there.
 
 ---
 
-## What's new in this update
+## Earlier update
 
 **Two fixes and a rebuilt library page.**
 
@@ -159,3 +159,62 @@ folder.
 
 One new test file ships in `test/` (`library-test.js`). It comes across with the
 folder, so there's nothing extra to do.
+
+---
+
+## What's new in this update
+
+**1. Refreshing is safe now.** Anything you planned, marked posted, moved or
+pinned comes through a refresh exactly where you left it — same date, same
+places, same platforms. Deciding on one platform protects the whole idea, so
+planning the Instagram post never disturbs its Pinterest pins.
+
+Anything you dismissed stays gone. It won't come back on any future refresh —
+and, new in this update, its slot gets refilled with something genuinely
+different rather than left empty or filled with the same theme wearing a hat.
+The message after a refresh now says exactly what it left alone.
+
+**2. Event posts stay in the right part of town.** Every Atlanta event now knows
+where it physically happens. A post about it can only be built two ways:
+
+- with places **inside** that area, or
+- as an explicit **"skip it, go here instead"** post for the big disruptive ones
+
+So Dragon Con with no downtown footage now produces *"Skip Downtown during Dragon
+Con — go here instead"* featuring your Buckhead and Battery spots, and says why
+in the description. It will never again call something a downtown guide and fill
+it with Buckhead. Events it can't do either way are skipped and named in the
+refresh message.
+
+My Events now shows this per date: a match count, an "avoid-the-crowds angle"
+badge, or "nothing in downtown" — so you can see what each date needs.
+
+**3. New tab: Monthly plan.** What September is *for*, separate from what's on
+the calendar. Each topic says why it works now, which platforms suit it, and
+whether you can make it today or what to shoot first. "+ Put on the calendar"
+adds it pinned. You can add your own topics too.
+
+Being straight with you: this is not a live trend feed. Nothing in the app knows
+what audio is trending today — anything claiming that would be making it up.
+What it does know is the part of the year that repeats: pollen season, the first
+warm day, graduation dinners, newcomer season, Friendsgiving, leaf season. Those
+are predictable and worth shooting ahead of. For genuinely current trends, the
+✨ AI ideas button is the one that asks Claude.
+
+**4. Every post now comes with a brief.** Open any idea on the calendar and
+there's a tab per platform under "How to make each one". Each gives you the
+angle, why those places belong together, the hook (or, for Pinterest, the
+searchable title), how to phrase it, the length, the structure beat by beat,
+what each place is doing, and what makes that platform's version different from
+the others. There's a "Copy this brief" button on each.
+
+After updating, hard-refresh (`⌘ + Shift + R`) and check:
+
+1. There's a **Monthly plan** tab between Calendar and My Events.
+2. Open any calendar idea — you should see **How to make each one** with a tab
+   per platform.
+3. Hit **Refresh calendar** — the message should mention what it left untouched.
+
+Three new files in `src/` (`monthly.js`, `voice.js`, `ui-monthly.js`) and one in
+`test/` (`planning-test.js`). They ride along with the folders, so the routine
+above is unchanged.

@@ -48,6 +48,9 @@ window.CJ = window.CJ || {};
     /* 'rows' (compact) or 'cards'. A preference, so it syncs across devices. */
     libraryView: 'rows',
 
+    /* Monthly topics you've dismissed from the planning list. */
+    hiddenTopics: [],
+
     ai: { key: '', model: 'claude-sonnet-5', voice: '' }
   };
 
@@ -57,6 +60,7 @@ window.CJ = window.CJ || {};
       items: [],
       events: [],
       ideas: [],
+      topics: [],           // your own monthly planning topics
       tagMeta: {},          // tag -> { category, color }
       tagIndex: {},         // lowercase key -> the spelling actually used
       settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),
@@ -103,6 +107,7 @@ window.CJ = window.CJ || {};
     merged.items = Array.isArray(s.items) ? s.items.map(normalizeItem) : [];
     merged.events = Array.isArray(s.events) ? s.events : [];
     merged.ideas = Array.isArray(s.ideas) ? s.ideas.map(normalizeIdea) : [];
+    merged.topics = Array.isArray(s.topics) ? s.topics.map(normalizeTopic) : [];
     merged.tagMeta = s.tagMeta || {};
     merged.schema = SCHEMA;
     merged.tagIndex = rebuildTagIndex(merged.items, merged.tagMeta);
@@ -720,6 +725,65 @@ window.CJ = window.CJ || {};
 
   /* ---------- events ---------- */
 
+  /* ---------- your own monthly topics ---------- */
+
+  function normalizeTopic(t) {
+    t = t || {};
+    var months = t.months;
+    if (months !== 'any') {
+      months = (Array.isArray(months) ? months : [])
+        .map(Number).filter(function (m) { return m >= 1 && m <= 12; });
+      if (!months.length) months = 'any';
+    }
+    return {
+      id: t.id || ('own:' + uid()),
+      own: true,
+      months: months,
+      title: t.title || 'Untitled topic',
+      why: t.why || '',
+      lane: t.lane || 'city',
+      platforms: Array.isArray(t.platforms) && t.platforms.length ? t.platforms : ['instagram'],
+      types: Array.isArray(t.types) && t.types.length ? t.types : ['restaurant', 'experience', 'home'],
+      needs: Array.isArray(t.needs) ? t.needs : [],
+      recurring: !!t.recurring,
+      evergreen: months === 'any',
+      createdAt: t.createdAt || new Date().toISOString()
+    };
+  }
+
+  function getTopics() { return state.topics || (state.topics = []); }
+
+  function upsertTopic(data) {
+    var list = getTopics();
+    if (data.id) {
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].id === data.id) {
+          list[i] = normalizeTopic(Object.assign({}, list[i], data));
+          commit();
+          return list[i];
+        }
+      }
+    }
+    var t = normalizeTopic(data);
+    list.unshift(t);
+    commit();
+    return t;
+  }
+
+  function deleteTopic(id) {
+    state.topics = getTopics().filter(function (t) { return t.id !== id; });
+    commit();
+  }
+
+  /** Built-in topics can't be deleted, only hidden. */
+  function setTopicHidden(id, hidden) {
+    var list = (state.settings.hiddenTopics || []).slice();
+    var ix = list.indexOf(id);
+    if (hidden && ix === -1) list.push(id);
+    if (!hidden && ix !== -1) list.splice(ix, 1);
+    updateSettings({ hiddenTopics: list });
+  }
+
   function getEvents() { return state.events; }
 
   function upsertEvent(data) {
@@ -1018,6 +1082,10 @@ window.CJ = window.CJ || {};
     guessCategory: guessCategory,
     registerTags: registerTags,
     getEvents: getEvents,
+    getTopics: getTopics,
+    upsertTopic: upsertTopic,
+    deleteTopic: deleteTopic,
+    setTopicHidden: setTopicHidden,
     upsertEvent: upsertEvent,
     deleteEvent: deleteEvent,
     getIdeas: getIdeas,

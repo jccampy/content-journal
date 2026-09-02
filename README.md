@@ -42,6 +42,30 @@ flagged rather than quietly dropped. Merging into a place you already have never
 anything: new tags fold in, and new notes stack as another layer of footage. After it runs
 there's an **Undo** that removes only what it just added.
 
+**Monthly plan** — What a month is *for*, above the day-to-day calendar. Each
+topic says why it works now, which lane and platforms it belongs to, and whether
+your library can already make it or what you'd have to shoot first. Put one on
+the calendar and it lands pinned, so a refresh can't move it. Not a live trend
+feed — nothing here knows today's audio. What it does know is the shape of the
+year: pollen season, the first warm day, graduation dinners, newcomer season,
+Friendsgiving, leaf season — plus the formats that travel on their own mechanics
+(ranking beats listing, head-to-head beats a roundup, real numbers travel).
+
+**How to make each post** — Open any idea and there's a tab per platform. Each
+one tells you what the post physically is, why those places belong together, the
+hook or search title, how to phrase it, how long it should be, a beat-by-beat
+structure, what each place is doing in it, and what makes that platform's version
+different from the others. The three are treated as different jobs rather than
+one post reposted three times: TikTok is spoken and opinionated, Instagram is
+composed and saveable, Pinterest is *searched* — its title reads like a query,
+one pin per place, personality stripped out.
+
+**Refreshing is safe** — Anything you planned, posted, moved or pinned comes
+through a refresh untouched. Anything you dismissed never comes back, and its
+slot is refilled with something genuinely different rather than the same theme
+reshuffled. Only live suggestions move, and dated ones stay anchored to their
+date. The banner after a refresh tells you exactly what it left alone.
+
 **Library** — Two densities: compact **rows** (the default — about 22 places on
 screen) or **cards**, switched with the ▤ / ▦ buttons and remembered across your
 devices. Each row carries three letters — **T / I / P** — showing which platforms

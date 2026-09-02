@@ -25,6 +25,7 @@
     <button class="tab is-active" data-view="week">This Week</button>
     <button class="tab" data-view="library">Library</button>
     <button class="tab" data-view="calendar">Calendar</button>
+    <button class="tab" data-view="monthly">Monthly plan</button>
     <button class="tab" data-view="events">My Events</button>
     <button class="tab" data-view="settings">Settings</button>
   </nav>
@@ -183,6 +184,44 @@
     </div>
 
     <div id="calendar-body"></div>
+  </section>
+
+  <!-- ============ MONTHLY PLAN ============ -->
+  <section class="view" id="view-monthly">
+    <div class="view-head">
+      <div>
+        <h2 id="monthly-title">—</h2>
+        <p class="muted" id="monthly-sub">—</p>
+        <p class="muted-xs" id="monthly-mood"></p>
+      </div>
+      <div class="view-head-actions">
+        <div class="segmented segmented-sm">
+          <button type="button" id="monthly-prev" title="Previous month">‹</button>
+          <button type="button" id="monthly-today">This month</button>
+          <button type="button" id="monthly-next" title="Next month">›</button>
+        </div>
+        <button class="btn btn-primary" id="btn-add-topic">+ Add topic</button>
+      </div>
+    </div>
+
+    <p class="muted-xs" style="margin:-4px 0 12px;max-width:70ch">
+      What this month is <em>for</em> — the moments people reliably search for and the formats that
+      reliably travel. Not a live trend feed: nothing here knows today's audio. These are the parts
+      of the year that come back every time, so you can shoot ahead of them.
+    </p>
+
+    <div class="filterbar filterbar-one">
+      <div class="chipset" id="monthly-lanes">
+        <button class="chip" type="button" data-lane="city">Atlanta / lifestyle</button>
+        <button class="chip" type="button" data-lane="food">Food &amp; restaurants</button>
+        <button class="chip" type="button" data-lane="home">Home &amp; lifestyle</button>
+      </div>
+      <span class="fdiv"></span>
+      <label class="mini-check"><input type="checkbox" id="monthly-ready"> Only what I can make now</label>
+      <label class="mini-check"><input type="checkbox" id="monthly-hidden"> Show hidden</label>
+    </div>
+
+    <div id="monthly-body"></div>
   </section>
 
   <!-- ============ EVENTS ============ -->
@@ -464,6 +503,49 @@
   </div>
 </div>
 
+<!-- ============ TOPIC MODAL ============ -->
+<div class="modal-backdrop" id="topic-modal" hidden>
+  <div class="modal modal-sm" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h3 id="topic-modal-title">Add a topic</h3>
+      <button class="icon-btn" id="topic-modal-close" aria-label="Close">✕</button>
+    </div>
+    <form id="topic-form" class="modal-body" novalidate>
+      <input type="hidden" id="t-id">
+      <label class="field"><span>Title <em>*</em></span>
+        <input type="text" id="t-title" class="input" placeholder="e.g. Best rooftops before it gets cold"></label>
+      <label class="field"><span>Why it works now</span>
+        <textarea id="t-why" class="input" rows="2" placeholder="What makes people search for this, this month?"></textarea></label>
+      <div class="field-row">
+        <label class="field"><span>Lane</span>
+          <select id="t-lane" class="input">
+            <option value="city">Atlanta / lifestyle</option>
+            <option value="food">Food &amp; restaurants</option>
+            <option value="home">Home &amp; lifestyle</option>
+          </select></label>
+        <label class="field"><span>Months (blank = any)</span>
+          <input type="text" id="t-months" class="input" placeholder="e.g. 9, 10"></label>
+      </div>
+      <fieldset class="field"><span class="field-legend">Platforms</span>
+        <div class="chipset" id="t-platforms">
+          <label class="mini-check"><input type="checkbox" value="tiktok" checked> TikTok</label>
+          <label class="mini-check"><input type="checkbox" value="instagram" checked> Instagram</label>
+          <label class="mini-check"><input type="checkbox" value="pinterest" checked> Pinterest</label>
+        </div>
+      </fieldset>
+      <label class="field"><span>Tags it needs (comma separated)</span>
+        <input type="text" id="t-needs" class="input" placeholder="e.g. rooftop, view, patio">
+        <span class="field-hint">Used to work out whether your library can already make it.</span></label>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-danger-ghost" id="t-delete" hidden>Delete</button>
+        <div class="push"></div>
+        <button type="button" class="btn btn-ghost" id="t-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save topic</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- ============ EVENT MODAL ============ -->
 <div class="modal-backdrop" id="event-modal" hidden>
   <div class="modal modal-sm" role="dialog" aria-modal="true">
@@ -629,8 +711,10 @@
 <script src="src/cloud.js"></script>
 <script src="src/atlanta.js"></script>
 <script src="src/themes.js"></script>
+<script src="src/voice.js"></script>
 <script src="src/generator.js"></script>
 <script src="src/gaps.js"></script>
+<script src="src/monthly.js"></script>
 <script src="src/ai.js"></script>
 <script src="src/import.js"></script>
 <script src="src/ui-library.js"></script>
@@ -638,6 +722,7 @@
 <script src="src/ui-import.js"></script>
 <script src="src/ui-week.js"></script>
 <script src="src/ui-calendar.js"></script>
+<script src="src/ui-monthly.js"></script>
 <script src="src/ui-events.js"></script>
 <script src="src/ui-settings.js"></script>
 <script src="src/ui-sync.js"></script>

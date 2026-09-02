@@ -57,22 +57,49 @@
       btn.disabled = false;
       btn.textContent = '↻ Refresh calendar';
 
+      var st = res.stats;
       var bits = [];
-      if (res.stats.deadline) bits.push('<strong>' + res.stats.deadline + '</strong> deadline post' + (res.stats.deadline === 1 ? '' : 's') + ' placed first');
-      if (res.stats.occasion) bits.push('<strong>' + res.stats.occasion + '</strong> built around real Atlanta dates');
-      if (res.stats.theme) bits.push('<strong>' + res.stats.theme + '</strong> from your tags');
-      if (res.kept) bits.push('<strong>' + res.kept + '</strong> of yours left untouched');
+      if (st.deadline) bits.push('<strong>' + st.deadline + '</strong> deadline post' + (st.deadline === 1 ? '' : 's') + ' placed first');
+      if (st.occasion) bits.push('<strong>' + st.occasion + '</strong> built around real Atlanta dates');
+      if (st.theme) bits.push('<strong>' + st.theme + '</strong> from your tags');
 
       var msg = 'Calendar rebuilt: ' + (bits.join(' · ') || 'nothing new to add yet') + '.';
 
+      // Say plainly what a refresh did NOT touch. The whole anxiety about
+      // pressing this button is "will it undo my decisions" — answer it.
+      if (st.locked) {
+        msg += ' <br><strong>' + st.locked + '</strong> post' + (st.locked === 1 ? '' : 's') +
+               ' you\'d planned, posted or moved stayed exactly where ' +
+               (st.locked === 1 ? 'it was' : 'they were') + '.';
+      }
+      if (st.dismissed) {
+        msg += ' <strong>' + st.dismissed + '</strong> you dismissed ' +
+               (st.dismissed === 1 ? 'was' : 'were') + ' not brought back — those slots were ' +
+               'refilled with different ideas.';
+      }
+      if (st.escapes) {
+        msg += ' <br>' + st.escapes + ' event' + (st.escapes === 1 ? '' : 's') +
+               ' ran as an <em>avoid-the-crowds</em> angle because you have no content ' +
+               'in the area they happen in.';
+      }
+      if (st.areaSkipped && st.areaSkipped.length) {
+        var names = st.areaSkipped.slice(0, 3).map(function (a) {
+          return CJ.ui.esc(a.name) + ' (' + CJ.ui.esc(a.area.join('/')) + ')';
+        });
+        msg += ' <br><strong>Skipped on geography:</strong> ' + names.join(', ') +
+               (st.areaSkipped.length > 3 ? ' and ' + (st.areaSkipped.length - 3) + ' more' : '') +
+               ' — these happen somewhere you have no footage, and a guide to one part of ' +
+               'town can\'t be filled with another.';
+      }
+
       // If the spacing rule capped the output, say so plainly — a thin calendar
       // should never look like a bug.
-      if (res.stats.shortBy > 0) {
+      if (st.shortBy > 0) {
         var gaps = CJ.settings().minGapDays || {};
         var lo = Math.min(gaps.restaurant || 30, gaps.experience || 30, gaps.home || 30);
-        msg += ' <br><strong>Note:</strong> ' + res.stats.shortBy + ' slot' +
-               (res.stats.shortBy === 1 ? '' : 's') + ' across ' + res.stats.shortMonths + ' month' +
-               (res.stats.shortMonths === 1 ? '' : 's') + ' came up empty — every place that fit was ' +
+        msg += ' <br><strong>Note:</strong> ' + st.shortBy + ' slot' +
+               (st.shortBy === 1 ? '' : 's') + ' across ' + st.shortMonths + ' month' +
+               (st.shortMonths === 1 ? '' : 's') + ' came up empty — every place that fit was ' +
                'already booked inside your ' + lo + '-day spacing rule. That\'s the rule working. ' +
                'To fill them: add more content, or shorten the gap in Settings.';
       }
@@ -697,9 +724,97 @@
         : el('p', { class: 'muted-xs', text: 'No places attached yet.' })
     ]));
 
+    /* ---- the brief: what each platform's version actually is ------------
+       One tab per platform, because the whole point is that the TikTok and
+       the Pinterest version of the same footage are different posts. */
+    var drops = (idea.drops || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    if (drops.length) {
+      var briefSec = el('div', { class: 'idea-detail-section' }, [el('h4', { text: 'How to make each one' })]);
+      var tabs = el('div', { class: 'brief-tabs' });
+      var pane = el('div', { class: 'brief-pane' });
+
+      function showBrief(ix) {
+        CJ.ui.$$('.brief-tabs button', tabs).forEach(function (b, i) { b.classList.toggle('is-active', i === ix); });
+        pane.innerHTML = '';
+        var drop = drops[ix];
+        var b = CJ.voice.brief(idea, drop);
+
+        function row(label, value, cls) {
+          if (!value) return null;
+          return el('div', { class: 'brief-row ' + (cls || '') }, [
+            el('span', { class: 'brief-label', text: label }),
+            el('span', { class: 'brief-value', text: value })
+          ]);
+        }
+
+        pane.appendChild(el('div', { class: 'brief-head' }, [
+          el('span', { class: 'pill pill-' + drop.platform, text: CJ.ui.platformInfo(drop.platform).emoji + ' ' + b.platformLabel }),
+          el('span', { class: 'muted-xs', text: CJ.formatDate(drop.date, { weekday: 'long', month: 'short', day: 'numeric' }) }),
+          el('span', { class: 'push' }),
+          el('button', {
+            class: 'btn btn-ghost btn-sm', type: 'button', text: '⧉ Copy this brief',
+            onclick: function (e) {
+              navigator.clipboard.writeText(CJ.voice.briefText(idea, drop))
+                .then(function () { toast('Brief copied.'); })
+                .catch(function () { toast('Could not copy.', 'error'); });
+            }
+          })
+        ]));
+
+        pane.appendChild(row('What it is', b.is));
+        pane.appendChild(row('Who sees it', b.audience));
+        if (b.thread) pane.appendChild(row('Why these together', b.thread, 'is-thread'));
+
+        pane.appendChild(el('div', { class: 'brief-row is-hook' }, [
+          el('span', { class: 'brief-label', text: b.titleLabel }),
+          copyLine(b.title)
+        ]));
+        pane.appendChild(row('How to phrase it', b.voice));
+        pane.appendChild(row('Hook rule', b.hookRule));
+        pane.appendChild(row('Length', b.length));
+
+        pane.appendChild(el('div', { class: 'brief-row' }, [
+          el('span', { class: 'brief-label', text: 'Structure' }),
+          el('ol', { class: 'brief-list' }, b.structure.map(function (line) { return el('li', { text: line }); }))
+        ]));
+
+        if (b.roles.length) {
+          pane.appendChild(el('div', { class: 'brief-row' }, [
+            el('span', { class: 'brief-label', text: 'Each place' }),
+            el('div', { class: 'brief-roles' }, b.roles.map(function (r) {
+              return el('div', { class: 'brief-role' }, [
+                el('strong', { text: r.name }),
+                r.clip ? el('span', { class: 'pill pill-quiet', text: '🎬 ' + r.clip }) : null,
+                el('span', { class: 'brief-slot', text: r.slot }),
+                r.why ? el('span', { class: 'brief-why', text: r.why }) : null
+              ]);
+            }))
+          ]));
+        }
+
+        pane.appendChild(row('On screen', b.onScreen));
+        pane.appendChild(row('Caption', b.caption));
+        pane.appendChild(row('Call to action', b.cta));
+        pane.appendChild(row('Avoid', b.avoid, 'is-avoid'));
+        if (b.difference) pane.appendChild(row('vs the other platforms', b.difference, 'is-diff'));
+      }
+
+      drops.forEach(function (d, i) {
+        tabs.appendChild(el('button', {
+          class: 'brief-tab plat-' + d.platform, type: 'button',
+          text: CJ.ui.platformInfo(d.platform).emoji + ' ' + CJ.ui.platformInfo(d.platform).label,
+          onclick: function () { showBrief(i); }
+        }));
+      });
+      briefSec.appendChild(tabs);
+      briefSec.appendChild(pane);
+      body.appendChild(briefSec);
+      showBrief(0);
+    }
+
     if (idea.hooks && idea.hooks.length) {
       body.appendChild(el('div', { class: 'idea-detail-section' }, [
-        el('h4', { text: 'Hooks' })
+        el('h4', { text: 'Other hooks to try' })
       ].concat(idea.hooks.map(copyLine))));
     }
 

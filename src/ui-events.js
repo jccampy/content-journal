@@ -82,7 +82,7 @@
                angles: h.angles, types: h.types };
     }).concat(CJ.atlanta.EVENTS.map(function (e) {
       return { id: e.id, name: e.name, month: e.month, day: e.day, kind: 'event', approx: e.approx,
-               angles: e.angles, types: e.types };
+               angles: e.angles, types: e.types, area: e.area, crowds: e.crowds };
     }));
 
     all.sort(function (a, b) { return a.month - b.month || a.day - b.day; });
@@ -104,26 +104,42 @@
       var dateLabel = new Date(2000, o.month - 1, o.day)
         .toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-      // How many places in the library actually fit this date. Below the
-      // threshold it will never be scheduled — showing the number makes that
-      // obvious instead of mysterious.
-      var n = CJ.generator.coverageFor(o);
+      // Exactly what the generator would do with this date today, using the
+      // same geography rule — so the number here is the number that gets
+      // scheduled, not an optimistic count.
+      var cov = CJ.generator.coverageDetail(o);
       var min = CJ.generator.MIN_OCCASION_MATCHES;
-      var covered = n >= min;
+      var areaLabel = cov.area.length ? cov.area.join(' / ') : '';
 
-      list.appendChild(el('label', { class: 'builtin-row' + (covered ? '' : ' is-uncovered') }, [
+      var badge;
+      if (cov.mode === 'in-area') {
+        badge = el('span', { class: 'pill pill-good',
+          text: cov.count + ' match' + (cov.count === 1 ? '' : 'es'),
+          title: areaLabel ? 'Places you have in ' + areaLabel : 'Places that fit this date' });
+      } else if (cov.mode === 'escape') {
+        // Not enough where it happens, but it clogs that part of town — the
+        // avoidance angle is a real post, so say so rather than showing a zero.
+        badge = el('span', { class: 'pill pill-warn', text: '↝ avoid-the-crowds angle',
+          title: 'You have nothing in ' + areaLabel + ', but this event takes it over. ' +
+                 'It will run as "skip ' + areaLabel + ', go here instead" using ' +
+                 cov.awayCount + ' places elsewhere.' });
+      } else {
+        badge = el('span', { class: 'pill pill-quiet',
+          text: cov.count ? cov.count + ' match — needs ' + min : (areaLabel ? 'nothing in ' + areaLabel : 'no content'),
+          title: areaLabel
+            ? 'This happens in ' + areaLabel + '. It will not be scheduled until you have at least ' +
+              min + ' places there — a guide to one part of town cannot be filled with another.'
+            : 'Skipped until at least ' + min + ' places in your library fit it. Tag content for: ' +
+              ((o.angles || []).slice(0, 3).join(', ') || o.name) });
+      }
+
+      list.appendChild(el('label', { class: 'builtin-row' + (cov.mode === 'none' ? ' is-uncovered' : '') }, [
         cb,
         el('span', { class: 'bi-date', text: (o.approx ? '~' : '') + dateLabel }),
         el('span', { text: o.name }),
+        areaLabel ? el('span', { class: 'bi-area', text: '· ' + areaLabel }) : null,
         el('span', { class: 'push' }),
-        covered
-          ? el('span', { class: 'pill pill-good', text: n + ' match' + (n === 1 ? '' : 'es') })
-          : el('span', {
-              class: 'pill pill-quiet',
-              text: n ? n + ' match — needs ' + min : 'no content',
-              title: 'Skipped until at least ' + min + ' places in your library fit it. Tag content for: ' +
-                     ((o.angles || []).slice(0, 3).join(', ') || o.name)
-            })
+        badge
       ]));
     });
     bi.appendChild(list);

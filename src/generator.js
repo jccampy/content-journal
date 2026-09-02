@@ -38,6 +38,16 @@
       .replace(/\{items\}/g, ctx.items || '');
   }
 
+  function uniq(list) {
+    var seen = {}, out = [];
+    (list || []).forEach(function (x) { var k = String(x).toLowerCase(); if (!seen[k]) { seen[k] = 1; out.push(x); } });
+    return out;
+  }
+
+  function titleCase(s) {
+    return String(s || '').replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); });
+  }
+
   function listNames(items) {
     var names = items.map(function (i) { return i.name; });
     if (names.length <= 1) return names[0] || '';
@@ -406,41 +416,86 @@
     var existing = CJ.getIdeas();
     var knownNeighborhoods = CJ.allNeighborhoods();
 
-    /* --- 1. keep anything the user has touched --- */
+    /* --- 1. keep every decision, in the two different senses of "keep" ------
+
+       A refresh must never overwrite a decision. There are two kinds:
+
+         LOCKED   — planned, done, pinned, rescheduled, or edited. These come
+                    through untouched: same concept, same places, same dates.
+                    Deciding on one platform locks the whole concept, so
+                    planning the Instagram drop never wipes its Pinterest one.
+
+         DISMISSED — you said no. The concept must never reappear (its id is
+                    deterministic, so an exact match is skipped forever), AND
+                    the slot it occupied must open back up for something
+                    genuinely different. That second half is the part that used
+                    to be missing: a dismissal still counted toward the month's
+                    quota and still held its date, so saying no just left a
+                    hole. Now the month refills, and the theme you rejected is
+                    penalised there so the replacement isn't a near-twin.
+
+       Everything else is a live suggestion and is free to be regenerated and
+       moved. Occasion and deadline ideas are anchored to their date either
+       way, so "move things around" never drags a Dragon Con post off Dragon
+       Con weekend.                                                          */
     var kept = existing.filter(function (idea) {
       if (idea.pinned || idea.touched) return true;
       if (idea.status && idea.status !== 'suggested') return true;
       if (idea.source === 'ai') return true;
-      // A decision on any single platform preserves the whole concept, so
-      // planning the TikTok drop never wipes the Instagram one.
       return (idea.drops || []).some(function (d) {
         return d.pinned || d.touched || (d.status && d.status !== 'suggested');
       });
     });
-    // Drop kept ideas that have fallen out of the window and were never acted on.
+    // Drop kept ideas that have fallen out of the window and were never acted
+    // on. A dismissal is kept as a tombstone well beyond that, because its
+    // whole job is to stop the concept coming back.
     kept = kept.filter(function (idea) {
       var d = CJ.parseDate(idea.date);
       if (!d) return false;
       if (idea.status === 'done' || idea.status === 'planned') return true;
+      if (idea.status === 'dismissed') return d >= addDays(today, -400);
       return d >= addDays(today, -45);
     });
+
+    function isDismissed(idea) {
+      if (idea.status === 'dismissed') return true;
+      // Every platform individually dismissed is a dismissed concept.
+      var drops = idea.drops || [];
+      return drops.length > 0 && drops.every(function (d) { return d.status === 'dismissed'; });
+    }
 
     var keptIds = {};
     var keptPerMonth = {};
     var usedCount = {};
+    var rejectedThemeInMonth = {};   // "themeId|2026-09" -> times you said no
+    var freedSlots = 0;
+
     kept.forEach(function (idea) {
       keptIds[idea.id] = true;
       var mk = (idea.date || '').slice(0, 7);
-      keptPerMonth[mk] = (keptPerMonth[mk] || 0) + 1;
-      if (idea.status !== 'dismissed') {
-        (idea.itemIds || []).forEach(function (id) { usedCount[id] = (usedCount[id] || 0) + 1; });
+
+      if (isDismissed(idea)) {
+        // Does NOT fill a slot and does NOT hold its date — that is the whole
+        // point of dismissing it.
+        freedSlots++;
+        if (idea.themeId) {
+          var k = idea.themeId + '|' + mk;
+          rejectedThemeInMonth[k] = (rejectedThemeInMonth[k] || 0) + 1;
+        }
+        return;
       }
+
+      keptPerMonth[mk] = (keptPerMonth[mk] || 0) + 1;
+      (idea.itemIds || []).forEach(function (id) { usedCount[id] = (usedCount[id] || 0) + 1; });
     });
 
     var ctxBase = { cooldown: cooldown, used: usedCount, hookRotation: Math.floor(Math.random() * 7) };
     var pickDate = makeDatePicker(settings);
-    // Reserve every date already claimed by a kept idea.
-    kept.forEach(function (idea) { if (idea.date) pickDate(CJ.parseDate(idea.date), null, null); });
+    // Reserve every date a live kept idea is sitting on. Dismissed ones release
+    // theirs so the replacement can take that day.
+    kept.forEach(function (idea) {
+      if (idea.date && !isDismissed(idea)) pickDate(CJ.parseDate(idea.date), null, null);
+    });
 
     // Seed the spacing rule with real history and everything already booked.
     var spacer = makeSpacer();
@@ -453,7 +508,7 @@
     });
     // Everything already booked on the calendar, per platform.
     kept.forEach(function (idea) {
-      if (idea.status === 'dismissed') return;
+      if (isDismissed(idea)) return;
       (idea.drops || []).forEach(function (d) {
         if (d.status === 'dismissed') return;
         (d.itemIds || []).forEach(function (id) { spacer.record(id, d.platform, d.date); });
@@ -462,7 +517,8 @@
 
     var fresh = [];
     var stats = { deadline: 0, occasion: 0, theme: 0, skippedThin: 0, spacingBlocks: 0,
-                  shortMonths: 0, shortBy: 0, uncovered: [] };
+                  shortMonths: 0, shortBy: 0, uncovered: [],
+                  locked: 0, dismissed: freedSlots, escapes: 0, areaSkipped: [] };
 
     /** Filter a pool down to places that are actually free on this date. */
     function freeOn(pool, isoDate, platform) {
@@ -571,41 +627,80 @@
       var id = 'occ:' + occ.id + ':' + occ.date.getFullYear();
       if (keptIds[id]) return;
 
-      // Which library items genuinely fit this occasion?
+      /* ---- geography comes first, before any tag matching -----------------
+
+         An event happens somewhere. A post about it has to be set somewhere
+         that makes sense with it. There are exactly two honest ways to write
+         one, and the generator picks between them explicitly:
+
+           IN-AREA — places inside the event's own area. "Where to eat downtown
+                     during Dragon Con", featuring downtown spots.
+
+           ESCAPE  — places deliberately OUTSIDE it, for an event big enough
+                     that the crowds are the story. "Where to go while downtown
+                     is a zoo", featuring Buckhead and the Battery. The angle
+                     names the avoidance, so the geography is the point rather
+                     than a mistake.
+
+         What it must never do is take the in-area framing and fill it with
+         wherever-you-happen-to-have-footage. A Dragon Con guide listing
+         Buckhead is not a thinner version of a good post; it's a wrong one. */
+      var area = occ.area || [];
       var angleText = (occ.angles || []).join(' ') + ' ' + (occ.name || '') + ' ' + (occ.note || '');
-      var namedHoods = neighborhoodsIn(angleText, knownNeighborhoods);
+      // Fall back to reading a neighborhood out of the angle text for events
+      // with no declared area, and for your own events.
+      if (!area.length) area = neighborhoodsIn(angleText, knownNeighborhoods).map(function (n) { return String(n).toLowerCase(); });
 
-      var tagged = items.filter(function (it) {
+      function inArea(it) {
+        if (!area.length) return true;
+        var hood = (it.neighborhood || '').toLowerCase();
+        if (!hood) return false;
+        return area.some(function (a) { return hood === a || hood.indexOf(a) !== -1 || a.indexOf(hood) !== -1; });
+      }
+
+      function matchesAngle(it) {
         if (occ.types && occ.types.indexOf(it.type) === -1) return false;
-
-        // If the angle names a neighborhood, the place has to actually be there.
-        // A "downtown guide" full of West Midtown spots is worse than no post.
-        if (namedHoods.length) {
-          var hood = (it.neighborhood || '').toLowerCase();
-          var inHood = namedHoods.some(function (n) { return hood === String(n).toLowerCase(); });
-          if (!inHood) return false;
-        }
-
         if (!occ.angles || !occ.angles.length) return true;
         var bag = searchBag(it);
         for (var i = 0; i < occ.angles.length; i++) if (tagMatches(bag, occ.angles[i])) return true;
-        return namedHoods.length > 0;   // right neighborhood is itself a match
+        return false;
+      }
+
+      var typeOk = items.filter(function (it) { return !occ.types || occ.types.indexOf(it.type) !== -1; });
+
+      // In-area candidates: right place, and either the right vibe or simply
+      // being in the right place (which is itself the point of a local guide).
+      var tagged = typeOk.filter(function (it) {
+        return inArea(it) && (matchesAngle(it) || area.length > 0);
       });
 
       var pool = tagged;
+      var mode = 'in-area';
 
       /* A built-in Atlanta date only earns a slot if your library genuinely
          covers it. Two real matches minimum — one loose hit is not a guide.
-         Dragon Con with no downtown content is not a post you can make, and
-         suggesting it anyway just wastes a slot and your attention.
 
          Your own events are different: you added them deliberately, so they
          stay on the calendar as a date to plan around even with nothing
          attached, with a note saying what to tag. */
       var MIN_OCCASION_MATCHES = 2;
+
+      if (occ.kind !== 'custom' && pool.length < MIN_OCCASION_MATCHES && area.length && occ.crowds) {
+        // Not enough in the area — but this event snarls that part of town, so
+        // the avoidance angle is a real post rather than a consolation prize.
+        // It needs a proper line-up of its own, clearly outside the area.
+        var away = typeOk.filter(function (it) { return it.neighborhood && !inArea(it); });
+        if (away.length >= 3) {
+          pool = away;
+          mode = 'escape';
+          stats.escapes++;
+        }
+      }
+
       if (occ.kind !== 'custom' && pool.length < MIN_OCCASION_MATCHES) {
         stats.skippedThin++;
         stats.uncovered.push(occ.name);
+        if (area.length) stats.areaSkipped.push({ name: occ.name, area: area.slice() });
         return;
       }
       if (!pool.length && occ.kind !== 'custom') { stats.skippedThin++; return; }
@@ -613,12 +708,15 @@
       // Your own events outrank holidays, which outrank festivals. Real tag
       // matches count for a lot — a festival you have no content for is filler.
       var score = (occ.kind === 'custom' ? 120 : occ.kind === 'holiday' ? 55 : 30)
-                + Math.min(tagged.length, 5) * 14
-                + (tagged.length === 0 ? -25 : 0);
+                + Math.min(pool.length, 5) * 14
+                + (pool.length === 0 ? -25 : 0);
+      // An escape angle is a real post but a second choice — rank it below any
+      // event you can actually cover from inside its own area.
+      if (mode === 'escape') score *= 0.7;
 
       occCandidates.push({
-        occ: occ, id: id, pool: pool, score: score,
-        loose: tagged.length === 0, mk: monthKey(occ.date)
+        occ: occ, id: id, pool: pool, score: score, mode: mode, area: area,
+        loose: pool.length === 0, mk: monthKey(occ.date)
       });
     });
 
@@ -660,9 +758,18 @@
       var pseudoTheme = { format: chosen.length > 1 ? 'roundup' : 'single', hooks: [] };
       var angle = (occ.angles && occ.angles[0]) || 'what to do';
 
-      var title = occ.kind === 'holiday'
-        ? occ.name + ': ' + angle
-        : (occ.kind === 'custom' ? occ.name : occ.name + ' — ' + angle);
+      // The escape angle has to SAY it's an escape, in the title and the hooks,
+      // or it reads as a guide that got its geography wrong. Name the area
+      // being avoided and the areas you're sending people to instead.
+      var areaLabel = titleCase((cand.area || []).join(' & '));
+      var awayHoods = uniq(chosen.map(function (i) { return i.neighborhood; }).filter(Boolean));
+      var isEscape = cand.mode === 'escape';
+
+      var title = isEscape
+        ? 'Skip ' + areaLabel + ' during ' + occ.name + ' — go here instead'
+        : occ.kind === 'holiday'
+          ? occ.name + ': ' + angle
+          : (occ.kind === 'custom' ? occ.name : occ.name + ' — ' + angle);
 
       fresh.push({
         id: id,
@@ -671,26 +778,39 @@
         source: 'occasion',
         themeId: null,
         title: title,
-        blurb: (occ.note ? occ.note + ' ' : '') +
-               (occ.kind === 'custom'
-                 ? 'Your event on ' + CJ.formatDate(CJ.isoDate(occ.date)) + '.'
-                 : occ.name + ' lands on ' + CJ.formatDate(CJ.isoDate(occ.date)) +
-                   (occ.approx ? ' (approximate — confirm the official date).' : '.') +
-                   ' Post ahead of it so people can actually plan.') +
-               (!chosen.length
-                 ? ' — Nothing in your library fits this yet, so no places are attached. Add or tag content for ' +
-                   ((occ.angles || []).slice(0, 3).join(', ') || occ.name) + ' and refresh.'
-                 : ''),
+        blurb: isEscape
+          ? occ.name + ' takes over ' + areaLabel + ' on ' +
+            CJ.formatDate(CJ.isoDate(occ.date)) +
+            (occ.approx ? ' (approximate — confirm the date)' : '') +
+            '. You have no ' + areaLabel.toLowerCase() + ' footage, so this runs as the counter-programme: ' +
+            'the people avoiding the crowds are a real, searching audience that weekend. ' +
+            'Everything featured is outside ' + areaLabel.toLowerCase() + ' — ' + listNames(chosen.slice(0, 3)) +
+            (awayHoods.length ? ' (' + awayHoods.slice(0, 3).join(', ') + ')' : '') + '.'
+          : (occ.note ? occ.note + ' ' : '') +
+            (occ.kind === 'custom'
+              ? 'Your event on ' + CJ.formatDate(CJ.isoDate(occ.date)) + '.'
+              : occ.name + ' lands on ' + CJ.formatDate(CJ.isoDate(occ.date)) +
+                (occ.approx ? ' (approximate — confirm the official date).' : '.') +
+                ' Post ahead of it so people can actually plan.') +
+            (!chosen.length
+              ? ' — Nothing in your library fits this yet, so no places are attached. Add or tag content for ' +
+                ((occ.angles || []).slice(0, 3).join(', ') || occ.name) + ' and refresh.'
+              : ''),
         format: pseudoTheme.format,
         itemIds: chosen.map(function (i) { return i.id; }),
         platforms: occDrops.map(function (d) { return d.platform; }),
-        hooks: [
+        hooks: isEscape ? [
+          'If you are NOT doing ' + occ.name + ' this weekend, this one\'s for you',
+          'POV: ' + areaLabel + ' is a zoo and you just want a normal dinner',
+          'Where to go in Atlanta while everyone else is at ' + occ.name
+        ] : [
           occ.name + ' is ' + CJ.formatDate(CJ.isoDate(occ.date), { month: 'long', day: 'numeric' }) + ' — here\'s the plan',
           'If you\'re doing ' + occ.name + ' in Atlanta, save this',
           fill('{n} Atlanta spots for ' + occ.name, { n: chosen.length })
         ],
         captions: buildCaptions(pseudoTheme, chosen, ctx),
-        occasion: { name: occ.name, date: CJ.isoDate(occ.date), approx: !!occ.approx, kind: occ.kind },
+        occasion: { name: occ.name, date: CJ.isoDate(occ.date), approx: !!occ.approx, kind: occ.kind,
+                    area: cand.area || [], mode: cand.mode },
         deadlineFor: null,
         status: 'suggested',
         pinned: false,
@@ -754,6 +874,14 @@
 
           if (theme.reactive) score *= 0.55;                       // keep-in-your-pocket ideas rank lower
           if (lastUsedMonth[theme.id] === mi - 1) score *= 0.6;     // no back-to-back repeats
+
+          // You dismissed this theme in this month. The exact idea can't come
+          // back (its id is remembered), but re-offering the same theme with
+          // one place swapped is the same post wearing a hat. Push it right
+          // down so the freed slot gets something you haven't rejected.
+          var rej = rejectedThemeInMonth[theme.id + '|' + mk] || 0;
+          if (rej) score *= Math.pow(0.18, rej);
+
           score += (Math.random() - 0.5) * 12;                      // gentle shuffle so refreshes feel alive
 
           candidates.push({ theme: theme, neighborhood: v.neighborhood, pool: pool, chosen: chosen, score: score, id: vid });
@@ -844,6 +972,8 @@
       return (b.priority || 0) - (a.priority || 0);
     });
 
+    stats.locked = kept.filter(function (i) { return !isDismissed(i); }).length;
+
     return { ideas: all, stats: stats, kept: kept.length, fresh: fresh.length };
   }
 
@@ -854,27 +984,54 @@
    * Powers the "you have no content for this" markers in My Events, so it's
    * obvious why something never shows up rather than mysterious.
    */
-  function coverageFor(occLike) {
+  /**
+   * Same geography rule the generator uses, so the number shown in My Events is
+   * the number that will actually be scheduled. Returns a detail object; the
+   * old numeric behaviour is coverageFor().
+   */
+  function coverageDetail(occLike) {
     var items = CJ.getItems();
     var known = CJ.allNeighborhoods();
     var angles = occLike.angles || [];
     var types = occLike.types || null;
     var angleText = angles.join(' ') + ' ' + (occLike.name || '');
-    var namedHoods = neighborhoodsIn(angleText, known);
 
-    return items.filter(function (it) {
-      if (types && types.indexOf(it.type) === -1) return false;
-      if (namedHoods.length) {
-        var hood = (it.neighborhood || '').toLowerCase();
-        if (!namedHoods.some(function (n) { return hood === String(n).toLowerCase(); })) return false;
-        return true;
-      }
+    var area = (occLike.area || []).map(function (a) { return String(a).toLowerCase(); });
+    if (!area.length) area = neighborhoodsIn(angleText, known).map(function (n) { return String(n).toLowerCase(); });
+
+    function inArea(it) {
+      if (!area.length) return true;
+      var hood = (it.neighborhood || '').toLowerCase();
+      if (!hood) return false;
+      return area.some(function (a) { return hood === a || hood.indexOf(a) !== -1 || a.indexOf(hood) !== -1; });
+    }
+
+    var typeOk = items.filter(function (it) { return !types || types.indexOf(it.type) !== -1; });
+
+    var here = typeOk.filter(function (it) {
+      if (!inArea(it)) return false;
+      if (area.length) return true;               // right area is itself the match
       if (!angles.length) return true;
       var bag = searchBag(it);
       for (var i = 0; i < angles.length; i++) if (tagMatches(bag, angles[i])) return true;
       return false;
-    }).length;
+    });
+
+    var away = area.length ? typeOk.filter(function (it) { return it.neighborhood && !inArea(it); }) : [];
+
+    return {
+      count: here.length,
+      area: area,
+      inArea: here.length,
+      awayCount: away.length,
+      // What the generator would actually do with this date today.
+      mode: here.length >= 2 ? 'in-area'
+          : (occLike.crowds && area.length && away.length >= 3) ? 'escape'
+          : 'none'
+    };
   }
+
+  function coverageFor(occLike) { return coverageDetail(occLike).count; }
 
   /* ---------- spacing conflicts (for manual moves) ---------- */
 
@@ -975,9 +1132,11 @@
     refresh: refresh,
     conflictReport: conflictReport,
     coverageFor: coverageFor,
+    coverageDetail: coverageDetail,
     MIN_OCCASION_MATCHES: 2,
     conflictsAt: conflictsAt,
     itemMatchesTheme: itemMatchesTheme,
+    searchBag: searchBag,
     listNames: listNames,
     platformsFor: platformsFor
   };

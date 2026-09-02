@@ -1008,3 +1008,95 @@ input[type="date"].input { font-variant-numeric: tabular-nums; }
   .fpop { position: static; }
   .pop-panel { left: 8px; right: 8px; width: auto; min-width: 0; max-width: none; }
 }
+.bi-area { font-size: 11px; color: var(--ink-3); }
+
+/* ---------- post brief (idea modal) ---------- */
+
+.brief-tabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+.brief-tab {
+  border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2);
+  font: inherit; font-size: 12px; font-weight: 600; padding: 5px 11px;
+  border-radius: 999px; cursor: pointer; white-space: nowrap;
+}
+.brief-tab:hover { border-color: var(--ink-3); }
+.brief-tab.is-active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+.brief-pane {
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 9px;
+}
+.brief-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-bottom: 4px; }
+
+.brief-row { display: grid; grid-template-columns: 116px 1fr; gap: 10px; align-items: start; }
+.brief-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--ink-3); padding-top: 2px;
+}
+.brief-value { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+.brief-row.is-thread .brief-value { color: var(--ink); font-weight: 500; }
+.brief-row.is-avoid .brief-value { color: var(--red); }
+.brief-row.is-diff .brief-value { color: var(--violet); }
+.brief-row.is-hook .copyline { margin: 0; }
+
+.brief-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.brief-list li { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+
+.brief-roles { display: flex; flex-direction: column; gap: 5px; }
+.brief-role {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 5px 9px; font-size: 12px;
+}
+.brief-slot {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink-3); font-weight: 700;
+}
+.brief-why { color: var(--ink-3); font-size: 11.5px; flex: 1 1 100%; }
+
+@media (max-width: 620px) {
+  .brief-row { grid-template-columns: 1fr; gap: 3px; }
+}
+
+/* ---------- monthly plan ---------- */
+
+.mini-check {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--ink-2); cursor: pointer; white-space: nowrap;
+}
+
+.topic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+
+.topic-card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 3px solid var(--line-2);
+  border-radius: var(--radius); padding: 13px 15px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.topic-card.is-ready { border-left-color: var(--olive); }
+.topic-card.is-thin  { border-left-color: var(--amber); }
+.topic-card.is-none  { border-left-color: var(--line-2); background: var(--surface-2); }
+
+.topic-top { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.topic-title { font-family: var(--display); font-size: 18px; font-weight: 400; line-height: 1.2; margin: 0; }
+.topic-why { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; margin: 0; }
+
+.topic-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11.5px; }
+.topic-lane { color: var(--ink-3); font-weight: 600; }
+.topic-plats { display: flex; gap: 3px; flex-wrap: wrap; }
+
+.topic-state { font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.topic-state-ready { color: var(--olive); }
+.topic-state-thin  { color: var(--amber); }
+.topic-state-none  { color: var(--ink-3); }
+
+.topic-places { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.topic-missing {
+  font-size: 11.5px; color: var(--amber); margin: 0;
+  background: var(--amber-soft); padding: 6px 9px; border-radius: var(--radius-sm);
+}
+.topic-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+
+@media (max-width: 700px) {
+  .topic-grid { grid-template-columns: 1fr; }
+}

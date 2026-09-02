@@ -19,6 +19,8 @@
     } else if (name === 'calendar') {
       CJ.calendarUI.loadWeather();
       CJ.calendarUI.render();
+    } else if (name === 'monthly') {
+      CJ.monthlyUI.render();
     } else if (name === 'events') {
       CJ.eventsUI.render();
     } else if (name === 'settings') {
@@ -34,6 +36,7 @@
     CJ.weekUI.render();
     CJ.library.render();
     CJ.calendarUI.render();
+    CJ.monthlyUI.render();
     CJ.eventsUI.render();
     CJ.settingsUI.render();
     CJ.syncUI.render();
@@ -58,6 +61,7 @@
     CJ.importUI.init();
     CJ.weekUI.init();
     CJ.calendarUI.init();
+    CJ.monthlyUI.init();
     CJ.eventsUI.init();
     CJ.settingsUI.init();
     CJ.syncUI.init();
@@ -71,13 +75,14 @@
       if (current === 'week') CJ.weekUI.render();
       else if (current === 'library') CJ.library.render();
       else if (current === 'calendar') CJ.calendarUI.render();
+      else if (current === 'monthly') CJ.monthlyUI.render();
       else if (current === 'events') CJ.eventsUI.render();
       else if (current === 'settings') { CJ.settingsUI.render(); CJ.syncUI.render(); }
     });
 
     renderAll();
     var start = (location.hash || '').slice(1);
-    var known = ['week', 'library', 'calendar', 'events', 'settings'];
+    var known = ['week', 'library', 'calendar', 'monthly', 'events', 'settings'];
     // Land on This Week once there's a calendar to act on; on the Library while
     // it's still being built, since that's where the work is then.
     var fallback = CJ.getIdeas().length ? 'week' : 'library';

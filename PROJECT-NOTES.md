@@ -51,10 +51,13 @@ src/ai.js          optional Claude enrichment
 src/import.js      bulk-paste parser (pure — no DOM, no state writes)
 src/ui-library.js  shared DOM helpers + library view + place form
 src/gaps.js        derives "what to shoot next" — no stored state
+src/monthly.js     per-month topic bank + coverage (planning layer)
+src/voice.js       per-platform post briefs — pure, derived from idea + drop
 src/ui-layers.js   add/edit a layer of footage
 src/ui-import.js   the Quick add screen (paste → preview → import)
 src/ui-week.js     This Week (the daily screen) + the content gap report
-src/ui-calendar.js calendar view, reschedule, idea detail
+src/ui-calendar.js calendar view, reschedule, idea detail + the brief tabs
+src/ui-monthly.js  the Monthly plan board
 src/ui-events.js   custom events + built-in event toggles
 src/ui-settings.js backup, platform routing, spacing rule, prefs, AI key
 src/ui-sync.js     sync status chip + sync settings panel
@@ -319,6 +322,13 @@ full recovery on a wiped browser. **Run this after any change to sync.js or clou
 
 `test/handoff-test.js` covers the setup-link handover to a second device.
 
+`test/planning-test.js` covers refresh preservation, event geography, the
+monthly plan and the briefs. **Run this after any change to generator.js,
+atlanta.js, monthly.js or voice.js.** The refresh assertions are the ones that
+matter: they plan, post, move and dismiss, refresh twice, and check that
+nothing a decision touched moved by so much as a day. A no-in-area-place leak
+check would have caught the original Dragon Con bug.
+
 `test/library-test.js` covers the library view and the tag input. **Run this
 after any change to ui-library.js.** Half its assertions exist for the
 label-forwarding bug above — they click the box, click a suggestion, and check
@@ -342,6 +352,7 @@ node test/browser-test.js
 node test/sync-test.js
 node test/import-test.js
 node test/library-test.js
+node test/planning-test.js
 ```
 
 It starts its own static server and blocks the weather API for determinism. **Run it after any
@@ -385,6 +396,100 @@ button, so one opened from a right-hand button can't hang off screen.
 
 In cards, the footage strip now renders only when `layers.length > 1` or a clip
 carries a deadline. It used to appear on every card saying the same thing.
+
+---
+
+## Refresh: what it may and may not touch
+
+This is the invariant the whole calendar rests on, and it is easy to break
+silently. A refresh sorts every existing idea into one of three buckets:
+
+| Bucket | Test | What happens |
+|---|---|---|
+| **Locked** | planned / done / pinned / touched, or any drop is | Passed through byte-identical. Not re-dated, not re-cast. |
+| **Dismissed** | `isDismissed()` — status, or every drop dismissed | Kept as a tombstone for 400 days so its deterministic id can never regenerate. Does **not** hold its date and does **not** count toward the month quota. |
+| **Live** | everything else | Free to be regenerated and moved. |
+
+Deciding on ONE platform locks the whole concept — planning the Instagram drop
+must never wipe the Pinterest one.
+
+**A dismissal has to free its slot.** That was the bug: a dismissed idea still
+counted in `keptPerMonth` and still reserved its date, so saying no just left a
+hole in the month. Now `freedSlots` is counted, the date is released, and
+`rejectedThemeInMonth` multiplies that theme's score by `0.18^n` in that month
+so the replacement isn't the same post with one place swapped. The refresh
+banner reports locked / dismissed counts, because "will this undo my work" is
+the only real question anyone has about that button.
+
+Date anchoring is what makes "move things around, but not the dated ones" work:
+occasion and deadline ideas derive their date from the occasion, so a
+regenerated Dragon Con post lands on Dragon Con weekend again. Theme ideas
+float freely inside their month.
+
+---
+
+## Event geography — the rule that must not be relaxed
+
+Events have an `area` in `atlanta.js` (`['downtown']`) and, for the disruptive
+ones, `crowds: true`. A post about an event may only be built one of two ways:
+
+- **`in-area`** — every place is inside the event's area. Needs ≥2.
+- **`escape`** — only for `crowds: true` events with <2 in-area matches and ≥3
+  places elsewhere. The title, blurb and hooks all name the avoidance
+  ("Skip Downtown during Dragon Con — go here instead"), so the geography is
+  the point of the post rather than a mistake in it.
+
+If neither holds, the date is skipped and pushed onto `stats.areaSkipped`,
+which the refresh banner prints by name.
+
+**Do not fall back to "use whatever's in the library".** That is exactly what
+produced a Dragon Con guide full of Buckhead and Battery spots. `area` is
+consulted before any tag matching and is not conditional on the user happening
+to have content there — the earlier version derived the area from
+`allNeighborhoods()`, so an area she had no content in silently became "no area
+constraint", which is precisely backwards.
+
+`coverageDetail()` reuses the same rule so My Events shows the number that will
+actually be scheduled, and labels the escape case rather than showing a zero.
+
+---
+
+## Post briefs (`voice.js`)
+
+`brief(idea, drop)` is pure — same inputs, same output, nothing stored — so the
+guidance stays correct when a line-up or date is edited.
+
+Each brief carries: what the post physically is, who sees it, the **thread**
+(why these places belong in one post, derived from shared tags / one
+neighborhood / the occasion, and honest when there isn't one), a
+platform-appropriate title, phrasing rules, length, a beat-by-beat structure,
+each place's role, caption/CTA/avoid, and `difference` — what makes this
+platform's cut different from its siblings.
+
+The three platforms are modelled as genuinely different jobs, not one post
+reposted: TikTok is spoken and opinionated, Instagram is composed and
+saveable, Pinterest is **searched** (title reads like a query, one pin per
+place, no personality). If you ever find yourself making these more similar,
+that's the bug.
+
+---
+
+## Monthly plan (`monthly.js`)
+
+Topics, not themes. A theme is a recipe the generator runs against the library
+now; a topic is a thing worth making whether or not the footage exists yet.
+`forMonth(m)` returns them with coverage attached (`ready` at ≥3 matches) and
+`missing` — the needed tags nothing answers.
+
+**On the word "viral":** nothing here is a live trend feed and it must never
+pretend to be. A static file cannot know today's audio. What it ships is
+recurring annual demand (pollen season, the first warm day, Friendsgiving,
+newcomer season) and formats that travel because of platform mechanics
+(ranking, head-to-head, the receipt post). The tab says this in the UI. Live
+trends are what the ✨ AI ideas button is for.
+
+Scheduling from a topic creates a `source: 'topic'` idea that is `pinned` and
+`touched`, so it lands in the locked bucket immediately.
 
 ---
 
@@ -439,6 +544,10 @@ deletes places the import created — anything merged into a place that already 
 |---|---|
 | No footage/production status | Everything in the library is already shot. Julia removed it explicitly. |
 | Bulk import previews before writing | Bulk actions are the ones you can't eyeball afterwards. Preview + Undo, always. |
+| A refresh never touches a decision | Julia: planned/added things "should stay where they are". The button is useless if it's scary. |
+| A dismissal frees its slot | Saying no should produce something else, not a gap. |
+| Event posts are geographically coherent | Julia: "you should not talk about an event in the area and suggest spots in another area." |
+| No fake trend data | The app cannot know today's audio. Recurring annual demand is real and predictable; "trending now" from a static file would be a lie. |
 | Places hold layers, rather than one row per clip | She shoots the same place repeatedly and wants to add material without rewriting what's there. Spacing is about the place; freshness is about the clip. |
 | Spacing per platform, not global | Blocking a Pinterest pin because of an Instagram post would break the cross-posting rhythm. |
 | Skip an occasion rather than pad it | A wrong line-up is worse than a missing post. |

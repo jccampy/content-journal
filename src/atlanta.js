@@ -125,36 +125,36 @@
 
   var EVENTS = [
     // Winter
-    { id: 'garden-lights',   name: 'Garden Lights, Holiday Nights (Botanical Garden)', month: 11, day: 15, through: { month: 1, day: 15 }, approx: true, lead: 14, angles: ['holiday lights', 'date night', 'photo spots'], types: ['experience'] },
-    { id: 'christkindl',     name: 'Atlanta Christkindl Market',    month: 11, day: 21, approx: true, lead: 12, angles: ['holiday market', 'gift guide', 'mulled wine'], types: ['experience'] },
+    { id: 'garden-lights',   name: 'Garden Lights, Holiday Nights (Botanical Garden)', month: 11, day: 15, through: { month: 1, day: 15 }, approx: true, lead: 14, angles: ['holiday lights', 'date night', 'photo spots'], area: ['midtown'], types: ['experience'] },
+    { id: 'christkindl',     name: 'Atlanta Christkindl Market',    month: 11, day: 21, approx: true, lead: 12, angles: ['holiday market', 'gift guide', 'mulled wine'], area: ['midtown'], types: ['experience'] },
     { id: 'winter-wine',     name: 'Atlanta Winter Wine Festival',  month: 1,  day: 24, approx: true, lead: 12, angles: ['wine', 'winter events'], types: ['experience'] },
-    { id: 'oysterfest',      name: 'Atlanta Oysterfest',            month: 2,  day: 14, approx: true, lead: 10, angles: ['oysters', 'seafood spots'], types: ['restaurant', 'experience'] },
+    { id: 'oysterfest',      name: 'Atlanta Oysterfest',            month: 2,  day: 14, approx: true, lead: 10, angles: ['oysters', 'seafood spots'], area: ['old fourth ward'], types: ['restaurant', 'experience'] },
     { id: 'beer-bourbon-bbq',name: 'Beer, Bourbon & BBQ Festival',  month: 2,  day: 28, approx: true, lead: 10, angles: ['BBQ', 'bourbon bars'], types: ['restaurant', 'experience'] },
 
     // Spring
-    { id: 'brunch-fest',     name: 'Atlanta Brunch Festival',       month: 3,  day: 7,  approx: true, lead: 12, angles: ['brunch roundup', 'bottomless mimosas'], types: ['restaurant'] },
-    { id: 'cherry-blossom',  name: 'Brookhaven Cherry Blossom Festival', month: 3, day: 28, approx: true, lead: 12, angles: ['blooms & photo spots', 'Brookhaven guide'], types: ['experience'] },
+    { id: 'brunch-fest',     name: 'Atlanta Brunch Festival',       month: 3,  day: 7,  approx: true, lead: 12, angles: ['brunch roundup', 'bottomless mimosas'], area: ['midtown'], types: ['restaurant'] },
+    { id: 'cherry-blossom',  name: 'Brookhaven Cherry Blossom Festival', month: 3, day: 28, approx: true, lead: 12, angles: ['blooms & photo spots', 'Brookhaven guide'], area: ['brookhaven'], types: ['experience'] },
     { id: 'science-fest',    name: 'Atlanta Science Festival',      month: 3,  day: 14, approx: true, lead: 10, angles: ['family things to do', 'nerdy date night'], types: ['experience'] },
-    { id: 'ga-food-wine',    name: 'Georgia Food + Wine Festival',  month: 3,  day: 27, approx: true, lead: 14, angles: ['chef spotlight', 'food festival'], types: ['restaurant', 'experience'] },
-    { id: 'dogwood',         name: 'Dogwood Festival (Piedmont Park)', month: 4, day: 11, approx: true, lead: 14, angles: ['festival weekend guide', 'Midtown walk-and-eat', 'artist market'], types: ['experience'] },
-    { id: 'sweetwater420',   name: 'SweetWater 420 Fest',           month: 4,  day: 17, approx: true, lead: 12, angles: ['music festival', 'what to eat nearby'], types: ['experience'] },
-    { id: 'inman-park-fest', name: 'Inman Park Festival & Tour of Homes', month: 4, day: 24, approx: true, lead: 12, angles: ['home tour', 'Inman Park guide', 'porch inspo'], types: ['experience', 'home'] },
+    { id: 'ga-food-wine',    name: 'Georgia Food + Wine Festival',  month: 3,  day: 27, approx: true, lead: 14, angles: ['chef spotlight', 'food festival'], area: ['alpharetta'], types: ['restaurant', 'experience'] },
+    { id: 'dogwood',         name: 'Dogwood Festival (Piedmont Park)', month: 4, day: 11, approx: true, lead: 14, angles: ['festival weekend guide', 'Midtown walk-and-eat', 'artist market'], area: ['midtown'], crowds: true, types: ['experience'] },
+    { id: 'sweetwater420',   name: 'SweetWater 420 Fest',           month: 4,  day: 17, approx: true, lead: 12, angles: ['music festival', 'what to eat nearby'], area: ['midtown'], crowds: true, types: ['experience'] },
+    { id: 'inman-park-fest', name: 'Inman Park Festival & Tour of Homes', month: 4, day: 24, approx: true, lead: 12, angles: ['home tour', 'Inman Park guide', 'porch inspo'], area: ['inman park'], crowds: true, types: ['experience', 'home'] },
     { id: 'atl-film-fest',   name: 'Atlanta Film Festival',         month: 4,  day: 23, approx: true, lead: 12, angles: ['indie film', 'dinner + a movie'], types: ['experience'] },
-    { id: 'sweet-auburn',    name: 'Sweet Auburn Springfest',       month: 5,  day: 9,  approx: true, lead: 12, angles: ['Sweet Auburn guide', 'Black-owned food'], types: ['experience', 'restaurant'] },
-    { id: 'jazz-fest',       name: 'Atlanta Jazz Festival (Piedmont Park)', month: 5, day: 23, approx: true, lead: 14, angles: ['free things to do', 'picnic setup', 'Memorial Day weekend'], types: ['experience'] },
-    { id: 'caribbean-carnival', name: 'Atlanta Caribbean Carnival', month: 5, day: 23, approx: true, lead: 12, angles: ['Caribbean food', 'festival fits'], types: ['experience', 'restaurant'] },
+    { id: 'sweet-auburn',    name: 'Sweet Auburn Springfest',       month: 5,  day: 9,  approx: true, lead: 12, angles: ['Sweet Auburn guide', 'Black-owned food'], area: ['sweet auburn', 'downtown'], crowds: true, types: ['experience', 'restaurant'] },
+    { id: 'jazz-fest',       name: 'Atlanta Jazz Festival (Piedmont Park)', month: 5, day: 23, approx: true, lead: 14, angles: ['free things to do', 'picnic setup', 'Memorial Day weekend'], area: ['midtown'], crowds: true, types: ['experience'] },
+    { id: 'caribbean-carnival', name: 'Atlanta Caribbean Carnival', month: 5, day: 23, approx: true, lead: 12, angles: ['Caribbean food', 'festival fits'], area: ['downtown'], crowds: true, types: ['experience', 'restaurant'] },
 
     // Summer
-    { id: 'vahi-summerfest', name: 'Virginia-Highland Summerfest',  month: 6,  day: 6,  approx: true, lead: 12, angles: ['Va-Hi neighborhood guide', 'walkable festival day'], types: ['experience'] },
-    { id: 'juneteenth-fest', name: 'Juneteenth Atlanta Parade & Music Festival', month: 6, day: 19, approx: true, lead: 12, angles: ['Black-owned Atlanta', 'downtown guide'], types: ['experience', 'restaurant'] },
-    { id: 'peachtree',       name: 'AJC Peachtree Road Race',       month: 7,  day: 4,  approx: false, lead: 14, angles: ['race morning', 'post-race brunch', 'Buckhead-to-Midtown route eats'], types: ['experience', 'restaurant'] },
+    { id: 'vahi-summerfest', name: 'Virginia-Highland Summerfest',  month: 6,  day: 6,  approx: true, lead: 12, angles: ['Va-Hi neighborhood guide', 'walkable festival day'], area: ['virginia highland', 'va-hi'], crowds: true, types: ['experience'] },
+    { id: 'juneteenth-fest', name: 'Juneteenth Atlanta Parade & Music Festival', month: 6, day: 19, approx: true, lead: 12, angles: ['Black-owned Atlanta', 'downtown guide'], area: ['downtown', 'sweet auburn'], crowds: true, types: ['experience', 'restaurant'] },
+    { id: 'peachtree',       name: 'AJC Peachtree Road Race',       month: 7,  day: 4,  approx: false, lead: 14, angles: ['race morning', 'post-race brunch', 'Buckhead-to-Midtown route eats'], area: ['buckhead', 'midtown'], crowds: true, types: ['experience', 'restaurant'] },
     { id: 'ice-cream-fest',  name: 'Atlanta Ice Cream Festival',    month: 7,  day: 25, approx: true, lead: 10, angles: ['ice cream shops', 'beating the heat'], types: ['restaurant', 'experience'] },
     { id: 'peach-season',    name: 'Georgia peach season peaks',    month: 7,  day: 15, approx: true, lead: 14, angles: ['peach dishes & cocktails', 'peach recipes at home', 'farmers market haul'], types: ['restaurant', 'home'] },
-    { id: 'peachfest',       name: 'Peachfest',                     month: 8,  day: 8,  approx: true, lead: 10, angles: ['peach everything', 'Midtown guide'], types: ['restaurant', 'experience'] },
-    { id: 'dragoncon',       name: 'Dragon Con',                    month: 9,  day: 4,  approx: true, lead: 12, angles: ['downtown chaos survival guide', 'people watching', 'where to eat downtown'], types: ['experience', 'restaurant'] },
+    { id: 'peachfest',       name: 'Peachfest',                     month: 8,  day: 8,  approx: true, lead: 10, angles: ['peach everything', 'Midtown guide'], area: ['midtown'], types: ['restaurant', 'experience'] },
+    { id: 'dragoncon',       name: 'Dragon Con',                    month: 9,  day: 4,  approx: true, lead: 12, angles: ['downtown chaos survival guide', 'people watching', 'where to eat downtown'], area: ['downtown'], crowds: true, types: ['experience', 'restaurant'] },
 
     // Fall
-    { id: 'atl-food-wine',   name: 'Atlanta Food & Wine Festival',  month: 9,  day: 12, approx: true, lead: 14, angles: ['chef tastings', 'what to wear', 'best bites'], types: ['restaurant', 'experience'] },
+    { id: 'atl-food-wine',   name: 'Atlanta Food & Wine Festival',  month: 9,  day: 12, approx: true, lead: 14, angles: ['chef tastings', 'what to wear', 'best bites'], area: ['midtown'], types: ['restaurant', 'experience'] },
     { id: 'yellow-daisy',    name: 'Yellow Daisy Festival (Stone Mountain)', month: 9, day: 5, approx: true, lead: 12, angles: ['craft market', 'day trip'], types: ['experience'] },
     { id: 'shaky-knees',     name: 'Shaky Knees Music Festival',    month: 9,  day: 19, approx: true, lead: 14, angles: ['festival guide', 'Old Fourth Ward food nearby', 'festival fits'], types: ['experience', 'restaurant'] },
     { id: 'japanfest',       name: 'JapanFest',                     month: 9,  day: 19, approx: true, lead: 10, angles: ['Japanese food in Atlanta', 'Chamblee/Duluth guide'], types: ['experience', 'restaurant'] },
@@ -197,7 +197,11 @@
         if (disabledIds.indexOf(e.id) !== -1) return;
         var d = new Date(y, e.month - 1, e.day);
         if (d >= startDate && d <= endDate) {
-          out.push({ kind: 'event', id: e.id, name: e.name, date: d, lead: e.lead || 12, angles: e.angles || [], types: e.types || null, approx: !!e.approx });
+          out.push({ kind: 'event', id: e.id, name: e.name, date: d, lead: e.lead || 12,
+                     angles: e.angles || [], types: e.types || null, approx: !!e.approx,
+                     // Where it physically happens, and whether it's disruptive
+                     // enough that "go somewhere else" is its own good post.
+                     area: e.area || null, crowds: !!e.crowds });
         }
       });
     }
