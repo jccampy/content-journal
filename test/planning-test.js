@@ -53,6 +53,12 @@ const SEED = `
   await new Promise(r => server.listen(8905, r));
   const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
   const page = await browser.newPage({ viewport: { width: 1280, height: 1200 } });
+  // Pin "today" to mid-August. Several assertions are about Dragon Con
+  // (early September); run the suite between September and spring and it falls
+  // outside the 6-month horizon, so those checks failed for date reasons, not
+  // code reasons. setFixedTime fixes Date only — timers keep running.
+  const FIXED_TODAY = new Date(new Date().getFullYear() + '-08-10T12:00:00');
+  await page.clock.setFixedTime(FIXED_TODAY);
   const errors = [];
   page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
   page.on('console', m => { if (m.type() === 'error' && !/ERR_/.test(m.text())) errors.push('CONSOLE: ' + m.text()); });
@@ -326,6 +332,7 @@ const SEED = `
   /* ------------------------------------------------------- 6. mobile ---- */
   console.log('\n6. Mobile');
   const mob = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await mob.clock.setFixedTime(FIXED_TODAY);
   await mob.route('**/api.open-meteo.com/**', r => r.abort());
   await mob.route('**/fonts.googleapis.com/**', r => r.abort());
   await mob.goto('http://localhost:8905/index.html', { waitUntil: 'domcontentloaded' });

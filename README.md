@@ -17,6 +17,35 @@ library lives in a real database instead of a browser — see **SUPABASE-SETUP.m
 
 ## What it does
 
+**Overview** — The first screen. What's going up this week (and anything that slipped),
+what you've posted lately, how many clips have never been used, the next six posts, the
+platform mix for the next 30 days, the places most ready to use right now, the collections
+with the most left in them, and a short "what to shoot next". Empty library? It's the
+getting-started screen instead.
+
+**Collections** — Switch the Library from *Places* to *Collections* to see your content by
+**location** (every neighborhood), **subject** (any tag on two or more places: date night,
+patio, cozy, hosting…) and **type**. Each one shows how many places and clips it holds, how
+many clips were never posted, how many places are free to use today, and what's already
+coming up. **Browse** filters the library to it; **Plan this** builds a plan from it.
+Nothing to maintain: tag a place and it joins its collections on its own.
+
+**Place journal** — The 📖 on any place. Its whole story in order: which platforms it's
+free on, every post coming up, then every shoot and every post, newest first, including
+history from before the calendar existed.
+
+**Build a plan** — One screen: how far ahead (this month to 12 months), how busy (light,
+steady, busy), which days you post, and optionally **build from one collection** so the
+plan is all Old Fourth Ward, or all date night. It runs the normal refresh, so anything you
+planned, posted, moved or pinned stays put. A scoped plan is thinner by nature (the spacing
+rule caps how often the same few places can run) and it tells you so.
+
+**Drag to reschedule** — In the calendar's Grid view, drag a post onto another day. It's
+pinned there, only that platform moves, and you're warned if it lands too close to another
+post about the same place.
+
+**On your phone** — The sections live in a bottom bar, one thumb-tap each.
+
 **Quick add** — The fast way to fill the library. Hit **⚡ Quick add**, paste a list, and it
 works out the shape on its own. Three shapes all work:
 

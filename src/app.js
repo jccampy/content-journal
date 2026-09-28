@@ -6,7 +6,7 @@
   'use strict';
 
   var $ = CJ.ui.$, $$ = CJ.ui.$$;
-  var current = 'library';
+  var current = 'home';
 
   function showView(name) {
     current = name;
@@ -14,7 +14,9 @@
     $$('#tabs .tab').forEach(function (t) { t.classList.toggle('is-active', t.getAttribute('data-view') === name); });
     if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
 
-    if (name === 'week') {
+    if (name === 'home') {
+      CJ.homeUI.render();
+    } else if (name === 'week') {
       CJ.weekUI.render();
     } else if (name === 'calendar') {
       CJ.calendarUI.loadWeather();
@@ -33,6 +35,7 @@
   }
 
   function renderAll() {
+    CJ.homeUI.render();
     CJ.weekUI.render();
     CJ.library.render();
     CJ.calendarUI.render();
@@ -65,6 +68,10 @@
     CJ.eventsUI.init();
     CJ.settingsUI.init();
     CJ.syncUI.init();
+    CJ.journalUI.init();
+    CJ.collectionsUI.init();
+    CJ.planUI.init();
+    CJ.homeUI.init();
 
     $$('#tabs .tab').forEach(function (t) {
       t.addEventListener('click', function () { showView(t.getAttribute('data-view')); });
@@ -72,7 +79,8 @@
 
     // Re-render whatever's on screen whenever the data changes.
     CJ.subscribe(function () {
-      if (current === 'week') CJ.weekUI.render();
+      if (current === 'home') CJ.homeUI.render();
+      else if (current === 'week') CJ.weekUI.render();
       else if (current === 'library') CJ.library.render();
       else if (current === 'calendar') CJ.calendarUI.render();
       else if (current === 'monthly') CJ.monthlyUI.render();
@@ -82,10 +90,10 @@
 
     renderAll();
     var start = (location.hash || '').slice(1);
-    var known = ['week', 'library', 'calendar', 'monthly', 'events', 'settings'];
-    // Land on This Week once there's a calendar to act on; on the Library while
-    // it's still being built, since that's where the work is then.
-    var fallback = CJ.getIdeas().length ? 'week' : 'library';
+    var known = ['home', 'week', 'library', 'calendar', 'monthly', 'events', 'settings'];
+    // Land on the Overview: it shows what's next, and when the library is
+    // empty it's the onboarding screen, so it's right in both states.
+    var fallback = 'home';
     showView(known.indexOf(start) !== -1 ? start : fallback);
 
     if (setupHandoff) {

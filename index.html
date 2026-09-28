@@ -21,13 +21,14 @@
       <p class="brand-sub">Atlanta · lifestyle · food · home</p>
     </div>
   </div>
-  <nav class="tabs" id="tabs">
-    <button class="tab is-active" data-view="week">This Week</button>
-    <button class="tab" data-view="library">Library</button>
-    <button class="tab" data-view="calendar">Calendar</button>
-    <button class="tab" data-view="monthly">Monthly plan</button>
-    <button class="tab" data-view="events">My Events</button>
-    <button class="tab" data-view="settings">Settings</button>
+  <nav class="tabs" id="tabs" aria-label="Sections">
+    <button class="tab is-active" data-view="home"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.8V20h13V9.8"/><path d="M10 20v-5.5h4V20"/></svg><span class="tab-tx">Overview</span><span class="tab-short">Home</span></button>
+    <button class="tab" data-view="week"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span class="tab-tx">This Week</span><span class="tab-short">Week</span></button>
+    <button class="tab" data-view="library"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg><span class="tab-tx">Library</span><span class="tab-short">Library</span></button>
+    <button class="tab" data-view="calendar"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span class="tab-tx">Calendar</span><span class="tab-short">Calendar</span></button>
+    <button class="tab" data-view="monthly"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 8.5 4.5-8.5 4.5L3.5 8z"/><path d="m3.5 12.5 8.5 4.5 8.5-4.5"/><path d="m3.5 16.5 8.5 4.5 8.5-4.5" opacity=".55"/></svg><span class="tab-tx">Monthly plan</span><span class="tab-short">Monthly</span></button>
+    <button class="tab" data-view="events"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4.5"/><path d="M5 5h11l-2 3.5 2 3.5H5"/></svg><span class="tab-tx">My Events</span><span class="tab-short">Events</span></button>
+    <button class="tab" data-view="settings"><svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span class="tab-tx">Settings</span><span class="tab-short">Settings</span></button>
   </nav>
   <div class="topbar-actions">
     <button class="sync-chip" id="sync-chip" title="Sync status"><span class="sync-dot"></span><span id="sync-label">Local only</span></button>
@@ -38,8 +39,22 @@
 
 <main>
 
+  <!-- ============ OVERVIEW ============ -->
+  <section class="view is-active" id="view-home">
+    <div class="view-head">
+      <div>
+        <h2 id="home-greeting">Hello</h2>
+        <p class="muted" id="home-sub">—</p>
+      </div>
+      <div class="view-head-actions">
+        <button class="btn btn-primary" id="btn-home-plan">✦ Build a plan</button>
+      </div>
+    </div>
+    <div id="home-body"></div>
+  </section>
+
   <!-- ============ THIS WEEK ============ -->
-  <section class="view is-active" id="view-week">
+  <section class="view" id="view-week">
     <div class="view-head">
       <div>
         <h2>This week</h2>
@@ -66,13 +81,18 @@
         <p class="muted-xs">Everything you've already shot. Tag it once, then let the calendar keep finding new ways to run it.</p>
       </div>
       <div class="view-head-actions">
-        <input type="search" id="search" class="input" placeholder="Search places, notes, tags…" autocomplete="off">
+        <div class="segmented lib-mode" id="lib-mode" role="tablist" aria-label="Browse by">
+          <button data-mode="places" type="button" class="is-active">Places</button>
+          <button data-mode="collections" type="button">Collections</button>
+        </div>
+        <input type="search" id="search" class="input lib-only" placeholder="Search places, notes, tags…" autocomplete="off">
+        <input type="search" id="coll-search" class="input coll-only" placeholder="Find a neighborhood or subject…" autocomplete="off">
       </div>
     </div>
 
     <!-- One bar. The three filters open as popovers so a library with 80 tags
          doesn't push the actual content below the fold. -->
-    <div class="filterbar filterbar-one">
+    <div class="filterbar filterbar-one lib-only">
       <div class="fpop" id="fpop-type">
         <button class="fbtn" type="button" data-pop="type">Type <span class="fbtn-n" hidden></span> <span class="caret">▾</span></button>
         <div class="pop-panel" hidden><div class="pop-body" id="type-filters"></div></div>
@@ -127,9 +147,10 @@
       <button class="btn btn-ghost btn-sm" id="btn-clear-filters" hidden>Clear</button>
     </div>
 
-    <div class="active-filters" id="active-filters" hidden></div>
+    <div class="lib-only"><div class="active-filters" id="active-filters" hidden></div></div>
 
     <div id="library-body"></div>
+    <div id="collections-body" class="coll-only"></div>
   </section>
 
   <!-- ============ CALENDAR ============ -->
@@ -141,7 +162,8 @@
       </div>
       <div class="view-head-actions">
         <button class="btn btn-ghost" id="btn-ai" title="Use Claude to write fresh themes, hooks and captions">✨ AI ideas</button>
-        <button class="btn btn-primary" id="btn-refresh">↻ Refresh calendar</button>
+        <button class="btn" id="btn-refresh">↻ Refresh</button>
+        <button class="btn btn-primary" id="btn-plan">✦ Build a plan</button>
       </div>
     </div>
 
@@ -176,6 +198,7 @@
       <div class="filter-group">
         <label class="filter-label" for="cal-months">Horizon</label>
         <select id="cal-months" class="input input-sm">
+          <option value="1">This month</option>
           <option value="3">Next 3 months</option>
           <option value="6" selected>Next 6 months</option>
           <option value="12">Next 12 months</option>
@@ -689,6 +712,28 @@
   </div>
 </div>
 
+<!-- ============ PLACE JOURNAL ============ -->
+<div class="modal-backdrop" id="journal-modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="journal-title">
+    <div class="modal-head">
+      <h3 id="journal-title">Journal</h3>
+      <button class="icon-btn" id="journal-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="journal-body"></div>
+  </div>
+</div>
+
+<!-- ============ PLAN BUILDER ============ -->
+<div class="modal-backdrop" id="plan-modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="plan-title">
+    <div class="modal-head">
+      <h3 id="plan-title">Build a content plan</h3>
+      <button class="icon-btn" id="plan-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="plan-body"></div>
+  </div>
+</div>
+
 <!-- ============ BACKUP TEXT MODAL ============ -->
 <div class="modal-backdrop" id="text-modal" hidden>
   <div class="modal" role="dialog" aria-modal="true">
@@ -724,6 +769,10 @@
 <script src="src/ui-calendar.js"></script>
 <script src="src/ui-monthly.js"></script>
 <script src="src/ui-events.js"></script>
+<script src="src/ui-journal.js"></script>
+<script src="src/ui-collections.js"></script>
+<script src="src/ui-plan.js"></script>
+<script src="src/ui-home.js"></script>
 <script src="src/ui-settings.js"></script>
 <script src="src/ui-sync.js"></script>
 <script src="src/sync.js"></script>

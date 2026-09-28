@@ -408,11 +408,22 @@
     var horizon = options.months || settings.horizonMonths || 6;
     var perMonth = settings.ideasPerMonth || 8;
     var cooldown = settings.repostCooldownDays != null ? settings.repostCooldownDays : 120;
+    // Plan focus (set by the Plan builder) SCOPES the plan: occasions and
+    // themes draw only from that collection. Tried first as a scoring bias and
+    // measured it: the generator already runs close to the spacing rule's
+    // ceiling, so a bias can't create room for more focused posts — it only
+    // reshuffled line-ups and cost 4-6 posts a quarter. A scope is honest about
+    // what it does. Deadlines and real posting history still use the whole
+    // library, so nothing due is dropped and spacing stays correct.
+    var focus = settings.planFocus && settings.planFocus.value ? settings.planFocus : null;
 
     var today = new Date(); today.setHours(0, 0, 0, 0);
     var end = new Date(today.getFullYear(), today.getMonth() + horizon, 0);
 
     var items = CJ.getItems();
+    var planItems = focus
+      ? items.filter(function (it) { return CJ.matchesCollection(it, focus); })
+      : items;
     var existing = CJ.getIdeas();
     var knownNeighborhoods = CJ.allNeighborhoods();
 
@@ -518,7 +529,8 @@
     var fresh = [];
     var stats = { deadline: 0, occasion: 0, theme: 0, skippedThin: 0, spacingBlocks: 0,
                   shortMonths: 0, shortBy: 0, uncovered: [],
-                  locked: 0, dismissed: freedSlots, escapes: 0, areaSkipped: [] };
+                  locked: 0, dismissed: freedSlots, escapes: 0, areaSkipped: [],
+                  focus: focus ? CJ.collectionLabel(focus) : null, focusPlaces: planItems.length };
 
     /** Filter a pool down to places that are actually free on this date. */
     function freeOn(pool, isoDate, platform) {
@@ -666,7 +678,7 @@
         return false;
       }
 
-      var typeOk = items.filter(function (it) { return !occ.types || occ.types.indexOf(it.type) !== -1; });
+      var typeOk = planItems.filter(function (it) { return !occ.types || occ.types.indexOf(it.type) !== -1; });
 
       // In-area candidates: right place, and either the right vibe or simply
       // being in the right place (which is itself the point of a local guide).
@@ -740,7 +752,7 @@
       // Date first, then places — the spacing rule can only be applied once we
       // know when the post is going up.
       var postDate = pickDate(addDays(occ.date, -(occ.lead || 12)), today, addDays(occ.date, -1));
-      var occLead = leadPlatformFor(pool.length ? pool : items, settings);
+      var occLead = leadPlatformFor(pool.length ? pool : planItems, settings);
       var occCtx = Object.assign({}, ctxBase, { platform: occLead });
       var chosen = pool.length ? pickItems(freeOn(pool, postDate, occLead), { max: 6 }, occCtx, 6) : [];
       if (!chosen.length && occ.kind !== 'custom') { stats.skippedThin++; return; }
@@ -850,7 +862,7 @@
           : [{ neighborhood: null }];
 
         variants.forEach(function (v) {
-          var pool = items.filter(function (it) {
+          var pool = planItems.filter(function (it) {
             if (!itemMatchesTheme(it, theme)) return false;
             if (v.neighborhood && (it.neighborhood || '').toLowerCase() !== v.neighborhood.toLowerCase()) return false;
             return true;

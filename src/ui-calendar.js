@@ -50,12 +50,12 @@
       } catch (err) {
         console.error(err);
         showNote('Something went wrong generating the calendar: ' + CJ.ui.esc(err.message), 'error');
-        btn.disabled = false; btn.textContent = '↻ Refresh calendar';
+        btn.disabled = false; btn.textContent = '↻ Refresh';
         return;
       }
       stale = false;
       btn.disabled = false;
-      btn.textContent = '↻ Refresh calendar';
+      btn.textContent = '↻ Refresh';
 
       var st = res.stats;
       var bits = [];
@@ -102,6 +102,14 @@
                (st.shortMonths === 1 ? '' : 's') + ' came up empty — every place that fit was ' +
                'already booked inside your ' + lo + '-day spacing rule. That\'s the rule working. ' +
                'To fill them: add more content, or shorten the gap in Settings.';
+      }
+
+      // A scoped plan draws from one collection, so say so — otherwise a
+      // thinner calendar after "Build a plan" reads like something broke.
+      if (st.focus) {
+        msg += ' <br><strong>Plan scope:</strong> new posts come only from <strong>' + CJ.ui.esc(st.focus) +
+               '</strong> (' + st.focusPlaces + ' place' + (st.focusPlaces === 1 ? '' : 's') + ').' +
+               ' Deadlines elsewhere are still placed. Clear the scope in <em>Build a plan</em> to use the whole library.';
       }
 
       if (!silent) showNote(msg, 'info');
@@ -478,9 +486,24 @@
     var d = entry.drop, idea = entry.idea;
     var pinfo = CJ.ui.platformInfo(d.platform);
     var conflicted = conflictMap[d.id] && conflictMap[d.id].length;
+    var movable = d.status !== 'done';
     return el('button', {
       class: 'g-chip plat-' + d.platform + ' status-' + (d.status || 'suggested') + (conflicted ? ' has-conflict' : ''),
       type: 'button',
+      draggable: movable ? 'true' : null,
+      'data-drop': d.id,
+      ondragstart: movable ? function (ev) {
+        dragId = d.id;
+        ev.dataTransfer.effectAllowed = 'move';
+        try { ev.dataTransfer.setData('text/plain', d.id); } catch (e) { /* old browsers */ }
+        ev.currentTarget.classList.add('is-dragging');
+        document.body.classList.add('is-dragging-drop');
+      } : null,
+      ondragend: function (ev) {
+        ev.currentTarget.classList.remove('is-dragging');
+        document.body.classList.remove('is-dragging-drop');
+        dragId = null;
+      },
       title: pinfo.label + ' · ' + fmtLabel(d.format) + '\n' + idea.title +
              ((d.itemIds || []).length ? '\n' + (d.itemIds || []).map(function (id) {
                var it = CJ.getItem(id); return it ? it.name : '';
@@ -491,6 +514,47 @@
       el('span', { class: 'g-dot' }),
       el('span', { class: 'g-text', text: idea.title })
     ]);
+  }
+
+  /* Drag a post to another day. Same write as the Move dialog: the drop is
+     pinned where you put it, only that platform moves, and a spacing clash
+     warns rather than blocks — the rule constrains the generator, not you. */
+  var dragId = null;
+
+  function moveDropTo(dropId, iso) {
+    var found = CJ.getDrop(dropId);
+    if (!found || !iso || found.drop.date === iso) return false;
+    var conflicts = CJ.generator.conflictsAt(dropId, iso);
+    CJ.updateDrop(dropId, { date: iso, pinned: true });
+    var when = CJ.formatDate(iso, { month: 'short', day: 'numeric' });
+    if (conflicts.length) {
+      toast('Moved to ' + when + ', but ' + conflicts[0].name + ' is only ' + conflicts[0].gap +
+            ' days from another post on ' + CJ.ui.platformInfo(found.drop.platform).label + '.', 'error');
+    } else {
+      toast('Moved to ' + when + ' and pinned there.');
+    }
+    render();
+    return true;
+  }
+
+  function dropTarget(cell, iso) {
+    cell.setAttribute('data-date', iso);
+    cell.addEventListener('dragover', function (ev) {
+      if (!dragId) return;
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = 'move';
+      cell.classList.add('is-drop-target');
+    });
+    cell.addEventListener('dragleave', function () { cell.classList.remove('is-drop-target'); });
+    cell.addEventListener('drop', function (ev) {
+      ev.preventDefault();
+      cell.classList.remove('is-drop-target');
+      var id = dragId;
+      try { id = ev.dataTransfer.getData('text/plain') || id; } catch (e) { /* ignore */ }
+      dragId = null;
+      document.body.classList.remove('is-dragging-drop');
+      if (id) moveDropTo(id, iso);
+    });
   }
 
   function renderGrid(body, entries) {
@@ -539,6 +603,7 @@
           el('div', { class: 'cal-daynum', text: String(day) })
         ]);
         here.forEach(function (e) { cell.appendChild(gridChip(e)); });
+        dropTarget(cell, iso);
         grid.appendChild(cell);
       }
 
@@ -905,6 +970,19 @@
     loadWeather: loadWeather,
     openIdea: openIdea,
     openReschedule: openReschedule,
+    moveDropTo: moveDropTo,
+    setMonths: function (n) {
+      view.months = n;
+      var sel = $('#cal-months');
+      if (sel) sel.value = String(n);
+    },
+    setMode: function (m) {
+      view.mode = m === 'grid' ? 'grid' : 'list';
+      $$('#cal-view button').forEach(function (x) {
+        x.classList.toggle('is-active', x.getAttribute('data-mode') === view.mode);
+      });
+      render();
+    },
     reloadWeather: function () { weatherLoaded = false; loadWeather(); }
   };
 

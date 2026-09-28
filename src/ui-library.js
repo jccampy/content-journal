@@ -372,6 +372,10 @@
         class: 'iconbtn', type: 'button', text: '✎', title: 'Edit',
         onclick: function (e) { e.stopPropagation(); openForm(item.id); }
       }),
+      el('button', {
+        class: 'iconbtn', type: 'button', text: '📖', title: 'Journal: every clip and post for this place',
+        onclick: function (e) { e.stopPropagation(); CJ.journalUI.open(item.id); }
+      }),
       item.link ? el('a', {
         class: 'iconbtn', href: item.link, target: '_blank', rel: 'noopener', text: '↗', title: item.link,
         onclick: function (e) { e.stopPropagation(); }
@@ -435,7 +439,11 @@
             class: 'btn btn-ghost btn-sm', type: 'button', text: '＋ Add footage',
             onclick: function () { CJ.layersUI.open(item.id); }
           }),
-          el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Edit place', onclick: function () { openForm(item.id); } })
+          el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Edit place', onclick: function () { openForm(item.id); } }),
+          el('button', {
+            class: 'btn btn-ghost btn-sm', type: 'button', text: '📖 Journal',
+            onclick: function () { CJ.journalUI.open(item.id); }
+          })
         ])
       ])
     ]);
@@ -1061,6 +1069,9 @@
     render: render,
     openForm: openForm,
     toggleTagFilter: toggleTagFilter,
+    clearFilters: clearFilters,
+    nextFreeOn: nextFreeOn,
+    nextFreeAny: nextFreeAny,
     filters: filters
   };
 

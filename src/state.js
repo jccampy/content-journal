@@ -51,7 +51,14 @@ window.CJ = window.CJ || {};
     /* Monthly topics you've dismissed from the planning list. */
     hiddenTopics: [],
 
-    ai: { key: '', model: 'claude-sonnet-5', voice: '' }
+    ai: { key: '', model: 'claude-sonnet-5', voice: '' },
+
+    /* Optional plan focus set by the Plan builder: a collection the plan is
+       built from, e.g. { kind: 'neighborhood', value: 'Midtown' }. Occasions
+       and themes use only its places; deadlines and history still see the
+       whole library. The spacing and geography rules are unchanged. null
+       means the whole library. */
+    planFocus: null
   };
 
   function blankState() {
@@ -1020,6 +1027,35 @@ window.CJ = window.CJ || {};
     catch (e) { return 0; }
   }
 
+  /* ---------- collections ----------
+     A collection is a saved lens on the library: every place in one
+     neighborhood, every place carrying a subject tag, or every place of one
+     type. Nothing is stored per collection — membership is always derived, so
+     a new place joins the right collections the moment it is tagged. */
+
+  function matchesCollection(item, coll) {
+    if (!item || !coll || !coll.value) return false;
+    var v = String(coll.value).toLowerCase();
+    if (coll.kind === 'neighborhood') return (item.neighborhood || '').toLowerCase() === v;
+    if (coll.kind === 'type') return item.type === coll.value;
+    if (coll.kind === 'tag') {
+      var bag = (item.tags || []).map(function (t) { return t.toLowerCase(); });
+      (item.layers || []).forEach(function (l) {
+        (l.tags || []).forEach(function (t) { bag.push(t.toLowerCase()); });
+      });
+      return bag.indexOf(v) !== -1;
+    }
+    return false;
+  }
+
+  function collectionLabel(coll) {
+    if (!coll) return '';
+    if (coll.kind === 'type') {
+      for (var i = 0; i < TYPES.length; i++) if (TYPES[i].id === coll.value) return TYPES[i].plural;
+    }
+    return coll.value;
+  }
+
   /* ---------- constants exposed to the UI ---------- */
 
   var TYPES = [
@@ -1039,6 +1075,8 @@ window.CJ = window.CJ || {};
   Object.assign(CJ, {
     STORAGE_KEY: STORAGE_KEY,
     TYPES: TYPES,
+    matchesCollection: matchesCollection,
+    collectionLabel: collectionLabel,
     REUSE: REUSE,
     PLATFORMS: PLATFORMS,
     TAG_CATEGORIES: TAG_CATEGORIES,

@@ -59,6 +59,10 @@ src/ui-week.js     This Week (the daily screen) + the content gap report
 src/ui-calendar.js calendar view, reschedule, idea detail + the brief tabs
 src/ui-monthly.js  the Monthly plan board
 src/ui-events.js   custom events + built-in event toggles
+src/ui-journal.js  one place's journal: clips + posts timeline (derived)
+src/ui-collections.js  library browsed by location / subject / type
+src/ui-plan.js     the Plan builder (horizon, pace, days, scope)
+src/ui-home.js     Overview — the landing screen
 src/ui-settings.js backup, platform routing, spacing rule, prefs, AI key
 src/ui-sync.js     sync status chip + sync settings panel
 src/sync.js        merge + conflict handling between device and cloud
@@ -66,7 +70,9 @@ src/app.js         boot, tab routing, render fan-out
 ```
 
 `ui-library.js` defines `CJ.ui` (the shared `$`, `el`, `toast`, `tagEl` helpers), so it must
-load before the other UI files.
+load before the other UI files. The four v2 files (journal, collections, plan, home) only
+call each other at render time, so their relative order doesn't matter, but they must load
+after `ui-library.js`, `gaps.js` and `ui-calendar.js`.
 
 ### Two traps worth knowing
 
@@ -346,8 +352,23 @@ persistence across refresh, platform routing, custom events, the spacing rule (v
 30 and 90 days), reschedule, conflict detection, backup round-trip, reload persistence, and
 mobile overflow.
 
+`test/upgrade-test.js` covers the v2 screens: Overview counts, Collections (membership,
+Browse filtering, honest empty search), the journal (every clip and every upcoming post),
+the Plan builder (settings saved, a planned post never moves, a scoped plan never uses
+places outside its collection, out-of-scope deadlines still placed), drag-to-move (moves,
+pins, posted items can't be dragged), and the phone bottom bar. **Run it after any change
+to the four v2 UI files, the grid code in ui-calendar.js, or `planFocus` in generator.js.**
+
+`planning-test.js` pins "today" to August 10 of the current year with
+`page.clock.setFixedTime`. Its Dragon Con assertions used to fail every year from early
+September to spring, because the festival fell outside the 6-month horizon. Keep the pin.
+
+`browser-test.js` has an intermittent timeout at the first tag entry (line ~65) that
+predates v2; it passes on a rerun. Worth chasing if it gets worse.
+
 ```bash
 npm install playwright
+node test/upgrade-test.js
 node test/browser-test.js
 node test/sync-test.js
 node test/import-test.js
@@ -557,6 +578,9 @@ deletes places the import created — anything merged into a place that already 
 | AI is optional, never required | A public static site can't hold an API key safely. |
 | Spacing rule warns on manual moves rather than blocking | She's the editor; the tool advises. |
 | Approximate event dates marked `~` | Festival dates shift yearly. Better to flag than to state a wrong date confidently. |
+| Plan focus is a scope, not a bias | Measured: a bias created no extra focused posts and cost 4-6 posts a quarter. |
+| Overview is the landing screen | It covers both states: onboarding when empty, what's next once there's a calendar. |
+| Collections are derived, never stored | A newly tagged place has to join its collections without anyone maintaining them. |
 
 ---
 
@@ -612,9 +636,58 @@ Underneath, `gaps.js` derives what the library *can't* reach:
 All derived, nothing stored. It exists because the honest consequence of "never invent a
 line-up" is that the app has to tell you what's missing instead.
 
+## v2: Overview, Collections, journal, Plan builder
+
+Added September 2026 to bring it up to what dedicated planning tools offer, without
+touching any rule above.
+
+**Overview (`ui-home.js`)** is the landing screen now (it was This Week). Four tiles (posts
+this week and slipped, posted in 30 days, places/clips, never-posted clips), Next up, the
+30-day platform mix, Ready to use (free now, never-posted first), the collections with the
+most to give, and a three-line gap summary linking to the full report on This Week. When
+the library is empty it doubles as onboarding. All derived.
+
+**Collections (`ui-collections.js`)** — a Places / Collections switch in the Library. A
+collection is `{ kind: 'neighborhood'|'tag'|'type', value }`; membership is
+`CJ.matchesCollection(item, coll)` in state.js and is never stored. Subjects are
+non-neighborhood tags (item or clip tags) on 2+ places. Each card: places, clips,
+never-posted, free now, posts coming up, and Browse (sets the normal library filters) /
+Plan this. The `.lib-only` / `.coll-only` classes plus `#view-library.is-collections`
+switch what shows.
+
+**Place journal (`ui-journal.js`)** — 📖 on a row or in its detail panel. Lane status per
+platform, Coming up, then History: every clip shot, every post (done drops), slipped
+posts, and pre-calendar history from `platformUse` so a place's story doesn't start the
+day the app was installed.
+
+**Plan builder (`ui-plan.js`)** — horizon (adds a 1-month option), pace
+(`ideasPerMonth` 4/8/12), posting days, and **Build from** a collection. It sets the
+existing settings plus `planFocus`, calls `calendarUI.setMonths()`, then a normal
+refresh, so every refresh invariant holds.
+
+`planFocus` **scopes** the plan: occasions and themes use `planItems` (the collection);
+deadlines and the spacing seed still use every item. It was first built as a scoring
+bias and measured over repeated refreshes on the sample library: the bias did not raise
+focused posts at all (Old Fourth Ward ~12.9 → ~12.3 posts per quarter) and cost 4-6 posts
+overall, because the generator already runs near the spacing ceiling and the boosted
+neighborhood guide swallowed all four places at once. A scope is honest about what it
+does; the refresh banner and the builder both say a scoped plan will be thinner.
+
+**Drag to move (`ui-calendar.js`)** — grid chips are draggable onto any day. Same write
+as the Move dialog (`updateDrop(id, { date, pinned: true })`), warns on a spacing clash,
+never blocks. Posted drops aren't draggable. HTML5 drag doesn't fire on phones; Move
+still works there.
+
+**Phone bottom bar** — at ≤760px `#tabs` is a fixed 7-column bar with SVG icons and short
+labels. The header drops its `backdrop-filter` on phones because a backdrop-filter makes
+the header the containing block for fixed children, which pinned the bar inside it.
+
+The palette and light-only rule are unchanged. v2 adds no colours.
+
 ## Current state
 
-- Lives at `github.com/<julia>/content-journal`, served by GitHub Pages.
+- Lives at `github.com/jccampy/content-journal`, served by GitHub Pages at
+  `jccampy.github.io/content-journal`.
 - A Claude artifact copy exists as a preview. **Separate storage from the GitHub version** —
   they never share data except through export/import.
 - Sync is on via her own free Supabase project. No backup routine — she explicitly rejected
