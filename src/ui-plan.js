@@ -2,10 +2,10 @@
    ui-plan.js — the Plan builder.
 
    One screen that answers "build me a plan" in the terms a person thinks in:
-   how far ahead, how busy, which days, and (optionally) what to lean into.
-   It sets the same settings the calendar already reads — horizonMonths,
-   ideasPerMonth, preferredDays — plus planFocus (a collection to build the
-   plan from), then runs a normal refresh.
+   how far ahead, how many posts a week on each platform (0 = paused), which
+   days, and (optionally) one collection to build from. It sets horizonMonths,
+   postsPerWeek, preferredDays and planFocus, then runs a normal refresh. It
+   also says plainly how many posts a week the library can really carry.
 
    Nothing here bypasses the generator's rules. A refresh never touches
    anything planned, posted, moved or pinned, the spacing rule is still a hard
@@ -18,11 +18,6 @@
 
   var $ = CJ.ui.$, el = CJ.ui.el;
 
-  var PACES = [
-    { n: 4,  label: 'Light',  hint: 'About 2 posts a week across platforms' },
-    { n: 8,  label: 'Steady', hint: 'About 4 posts a week — the default' },
-    { n: 12, label: 'Busy',   hint: 'About 6 posts a week, if the library can carry it' }
-  ];
   var HORIZONS = [
     { n: 1, label: 'This month' },
     { n: 3, label: '3 months' },
@@ -30,6 +25,18 @@
     { n: 12, label: '12 months' }
   ];
   var DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var FILL_ORDER = [4, 2, 6, 3, 5, 1, 0];
+
+  /** The days a platform will actually post on for n posts a week (mirrors CJ.slotDays). */
+  function daysFor(n, pref) {
+    var days = FILL_ORDER.filter(function (d) { return pref.indexOf(d) !== -1; }).slice(0, n);
+    FILL_ORDER.forEach(function (d) { if (days.length < n && days.indexOf(d) === -1) days.push(d); });
+    return days.sort(function (a, b) { return a - b; });
+  }
+
+  function primaryOf(ppw) {
+    return CJ.PLATFORM_IDS.slice().sort(function (a, b) { return (ppw[b] || 0) - (ppw[a] || 0); })[0];
+  }
 
   var draft = null;
 
@@ -78,36 +85,57 @@
   }
 
   function summary() {
-    var items = CJ.getItems();
     var focus = draft.focus;
     var pool = focus ? CJ.collectionsUI.statsFor(focus) : null;
-    var perWeek = Math.round(draft.perMonth * 2.3 / 4.3 * 10) / 10;
+    var active = CJ.PLATFORM_IDS.filter(function (p) { return draft.ppw[p] > 0; });
 
     var lines = [
-      'Up to <strong>' + draft.perMonth + ' concepts a month</strong> for <strong>' +
-        (draft.months === 1 ? 'the rest of this month' : 'the next ' + draft.months + ' months') +
-        '</strong>, each rolling out across its platforms over a few days (roughly ' + perWeek + ' posts a week).',
-      'Posts land on <strong>' + (draft.days.length
-        ? draft.days.slice().sort().map(function (d) { return DAYS[d]; }).join(', ')
-        : 'any day') + '</strong> where possible; dated occasions keep their own dates.'
+      active.map(function (p) {
+        var n = draft.ppw[p];
+        return '<strong>' + n + ' ' + CJ.ui.platformInfo(p).label + ' post' + (n === 1 ? '' : 's') + ' a week</strong> on ' +
+          daysFor(n, draft.days).map(function (d) { return DAYS[d]; }).join(', ');
+      }).join('; ') +
+      ', for ' + (draft.months === 1 ? 'the rest of this month' : 'the next ' + draft.months + ' months') + '.',
+      'Seasonal content only goes out in its season, places on hold sit out, and only places marked ' +
+        '<strong>enough for its own post</strong> get a post to themselves.'
     ];
+    var paused = CJ.PLATFORM_IDS.filter(function (p) { return !draft.ppw[p]; });
+    if (paused.length) lines.push(paused.map(function (p) { return CJ.ui.platformInfo(p).label; }).join(' and ') + ' paused: nothing gets planned there.');
+
+    // The honest part: can the library actually carry this?
+    var p0 = primaryOf(draft.ppw);
+    var cap = CJ.generator.capacity(p0);
+    var want = draft.ppw[p0];
+    var capLine = 'Right now your library can carry about <strong>' + cap.perWeek + ' ' + CJ.ui.platformInfo(p0).label +
+      ' post' + (cap.perWeek === 1 ? '' : 's') + ' a week</strong>: ' + cap.solo + ' place' + (cap.solo === 1 ? '' : 's') +
+      ' marked for their own post, ' + cap.group + ' more for roundups' +
+      (cap.held ? ', ' + cap.held + ' on hold' : '') + (cap.offSeason ? ', ' + cap.offSeason + ' out of season this month' : '') + '.';
+    lines.push(cap.perWeek + 0.05 < want
+      ? '<span class="plan-warn">' + capLine + ' So expect fewer than ' + want + ' a week; the calendar leaves the rest empty rather than stretch. ' +
+        'To get closer: tick “enough for its own post” on places that can carry one, add footage, or shorten the spacing gap in Settings.</span>'
+      : capLine);
+
     if (pool) {
       lines.push('Built only from <strong>' + CJ.ui.esc(CJ.collectionLabel(focus)) + '</strong>: ' +
         pool.items.length + ' place' + (pool.items.length === 1 ? '' : 's') + ', ' +
-        pool.unused + ' clip' + (pool.unused === 1 ? '' : 's') + ' never posted, ' +
         pool.freeNow + ' free to use right now. Deadlines from the rest of your library still get placed.');
-      var gap = CJ.settings().minGapDays.restaurant || 30;
-      lines.push('<span class="plan-warn">Expect fewer posts than a whole-library plan. The ' + gap +
-        '-day spacing rule caps how often the same ' + pool.items.length + ' place' +
-        (pool.items.length === 1 ? '' : 's') + ' can run' + (pool.items.length < 3 ? ', and most post ideas need 3 or more' : '') + '.</span>');
     }
     lines.push('Anything you\'ve planned, posted, moved or pinned stays exactly where it is.');
-
-    if (items.length && items.length < 12 && draft.perMonth >= 12) {
-      lines.push('<span class="plan-warn">With ' + items.length + ' places and a ' +
-        (CJ.settings().minGapDays.restaurant || 30) + '-day spacing rule, a busy pace will likely come up short. The calendar will say by how much.</span>');
-    }
     return lines;
+  }
+
+  function stepper(p) {
+    var n = draft.ppw[p] || 0;
+    var info = CJ.ui.platformInfo(p);
+    function set(v) { draft.ppw[p] = Math.max(0, Math.min(7, v)); render(); }
+    return el('div', { class: 'ppw-row' + (n ? '' : ' is-off') }, [
+      el('span', { class: 'ppw-name', text: info.emoji + ' ' + info.label }),
+      el('div', { class: 'ppw-step' }, [
+        el('button', { type: 'button', class: 'ppw-btn', 'aria-label': 'Fewer ' + info.label + ' posts', text: '−', onclick: function () { set(n - 1); } }),
+        el('span', { class: 'ppw-n', 'data-platform': p, text: n ? n + ' a week' : 'Paused' }),
+        el('button', { type: 'button', class: 'ppw-btn', 'aria-label': 'More ' + info.label + ' posts', text: '+', onclick: function () { set(n + 1); } })
+      ])
+    ]);
   }
 
   function render() {
@@ -129,15 +157,13 @@
     ]));
 
     body.appendChild(el('div', { class: 'field' }, [
-      el('span', { text: 'Pace' }),
-      segmented(PACES, draft.perMonth, function (n) { draft.perMonth = n; render(); }),
-      PACES.every(function (p) { return p.n !== draft.perMonth; })
-        ? el('p', { class: 'field-hint', text: 'Currently a custom pace of ' + draft.perMonth + ' concepts a month (set in Settings).' })
-        : null
+      el('span', { text: 'Posts per week' }),
+      el('div', { class: 'ppw' }, CJ.PLATFORM_IDS.map(stepper))
     ]));
 
     body.appendChild(el('div', { class: 'field' }, [
       el('span', { text: 'Posting days' }),
+      el('p', { class: 'field-hint', text: 'Your favourite days go first. If you post more times a week than you picked days, the extra days are added for you.' }),
       el('div', { class: 'chipset' }, DAYS.map(function (label, i) {
         var on = draft.days.indexOf(i) !== -1;
         return el('button', {
@@ -182,7 +208,10 @@
     body.appendChild(el('div', { class: 'modal-foot' }, [
       el('button', { class: 'btn btn-ghost', type: 'button', text: 'Cancel', onclick: close }),
       el('span', { class: 'push' }),
-      el('button', { class: 'btn btn-primary', type: 'button', id: 'plan-build', text: '✦ Build my plan', onclick: build })
+      el('button', {
+        class: 'btn btn-primary', type: 'button', id: 'plan-build', text: '✦ Build my plan', onclick: build,
+        disabled: CJ.PLATFORM_IDS.every(function (p) { return !draft.ppw[p]; })
+      })
     ]));
   }
 
@@ -191,7 +220,7 @@
   function build() {
     CJ.updateSettings({
       horizonMonths: draft.months,
-      ideasPerMonth: draft.perMonth,
+      postsPerWeek: Object.assign({}, draft.ppw),
       preferredDays: draft.days.slice().sort(),
       planFocus: draft.focus ? { kind: draft.focus.kind, value: draft.focus.value } : null
     });
@@ -206,7 +235,7 @@
     var s = CJ.settings();
     draft = {
       months: s.horizonMonths || 6,
-      perMonth: s.ideasPerMonth || 8,
+      ppw: Object.assign({ instagram: 0, tiktok: 0, pinterest: 0 }, s.postsPerWeek || { instagram: 5 }),
       days: (s.preferredDays || [2, 4, 6]).slice(),
       focus: opts.focus !== undefined ? opts.focus : (s.planFocus || null)
     };

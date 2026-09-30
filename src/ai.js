@@ -19,7 +19,9 @@
     return !!(ai.key && ai.key.trim());
   }
 
-  function callClaude(messages, system, maxTokens) {
+  var DEFAULT_MODEL = 'claude-sonnet-5-5';
+
+  function callClaude(messages, system, maxTokens, tools) {
     var ai = CJ.settings().ai || {};
     if (!ai.key) return Promise.reject(new Error('No API key saved. Add one in Settings.'));
 
@@ -31,12 +33,12 @@
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true'
       },
-      body: JSON.stringify({
-        model: ai.model || 'claude-sonnet-5',
+      body: JSON.stringify(Object.assign({
+        model: ai.model || DEFAULT_MODEL,
         max_tokens: maxTokens || 4000,
         system: system,
         messages: messages
-      })
+      }, tools ? { tools: tools } : {}))
     }).then(function (res) {
       return res.text().then(function (text) {
         var data;
@@ -257,6 +259,119 @@
     ).then(function (r) { return textOf(r).trim(); });
   }
 
-  CJ.ai = { hasKey: hasKey, generateIdeas: generateIdeas, punchUp: punchUp, test: test };
+  /* ---------- reading a place's website ----------------------------------
+     A static page can't fetch another site (browsers block it), so Claude
+     does the reading, server-side, with the web fetch tool. It returns
+     suggestions only: tags, a one-line summary, practical facts and post
+     ideas grounded in what the site actually says. Nothing is written to the
+     place until you pick what to keep. */
+
+  var WEB_SYSTEM = [
+    'You help an Atlanta food and lifestyle creator (Instagram @foodies.atl) plan posts.',
+    'You read a place\'s own website and turn it into tags and post ideas for HER content.',
+    'Only use facts that are on the site. If the site does not say it, leave it out. Never invent dishes, events or prices.',
+    'Voice for hooks: first person, conversational, a knowledgeable local friend, verdict-driven ("this is the one", "make the reservation").',
+    'Never use: "hidden gem", "must-try", "foodie heaven", Gen Z slang, or hashtags.'
+  ].join(' ');
+
+  function extractObject(text) {
+    var fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenced) text = fenced[1];
+    var start = text.indexOf('{'), end = text.lastIndexOf('}');
+    if (start === -1 || end < start) throw new Error('Claude couldn\'t turn that website into suggestions. Try again, or check the link.');
+    return JSON.parse(text.slice(start, end + 1));
+  }
+
+  function fetchErrors(res) {
+    return (res.content || []).filter(function (b) {
+      return b.type === 'web_fetch_tool_result' && b.content && b.content.type === 'web_fetch_tool_result_error';
+    }).map(function (b) { return b.content.error_code; });
+  }
+
+  function slugTag(t) {
+    return String(t || '').toLowerCase().replace(/[#"]/g, '').replace(/\s+/g, ' ').trim().slice(0, 32);
+  }
+
+  function readWebsite(item) {
+    var url = (item.link || '').trim();
+    if (!/^https?:\/\//i.test(url)) return Promise.reject(new Error('Add the website link (starting with https://) first.'));
+    if (!hasKey()) return Promise.reject(new Error('Reading websites needs your Claude key (Settings → AI). Browsers block the app from loading other sites directly.'));
+    var existingTags = CJ.allTags(false).slice(0, 80).map(function (t) { return t.tag; });
+    var voice = (CJ.settings().ai || {}).voice || '';
+    var host = url.replace(/^https?:\/\//i, '').split('/')[0].replace(/^www\./, '');
+
+    var prompt = [
+      'Place: ' + item.name + ' (' + item.type + (item.neighborhood ? ', ' + item.neighborhood : '') + ', Atlanta)',
+      'Website: ' + url,
+      'Her notes: ' + (item.notes || '(none)'),
+      'Her tags already on this place: ' + ((item.tags || []).join(', ') || '(none)'),
+      'Tags she uses elsewhere (reuse these spellings when they fit): ' + (existingTags.join(', ') || '(none yet)'),
+      voice ? 'Her voice notes: ' + voice : '',
+      '',
+      'Fetch the website. If the home page links to a menu, about, events or private-dining page on the same site, fetch up to 3 of those too.',
+      'Then return ONLY one JSON object, no prose:',
+      '{',
+      '  "summary": "one or two plain sentences: what it is and what it\'s known for",',
+      '  "neighborhood": "Atlanta neighborhood if the address makes it clear, else null",',
+      '  "tags": [{"tag": "short lowercase tag", "why": "what on the site supports it"}],',
+      '  "facts": {"hours": "", "reservations": "platform or policy", "price": "$-$$$$", "happyHour": "", "parking": ""},',
+      '  "ideas": [{"title": "short post idea", "angle": "why it works, 1 sentence", "hook": "first line she\'d say or overlay", "months": [numbers 1-12 when it only works then, else []], "format": "reel" or "carousel"}]',
+      '}',
+      'Tags: 5-10, things people search or plan by: cuisine, dishes, vibe, features (patio, rooftop, dog friendly, brunch, happy hour, late night, private dining, reservations), occasions (date night, group dinner, birthday). Skip tags she already has.',
+      'Ideas: 4-6, each specific to something real on this site (a signature dish, a recurring event, a seasonal menu, a happy hour, a chef, the space). Seasonal or holiday menus get their months.',
+      'Leave any fact blank if the site doesn\'t say it.'
+    ].filter(Boolean).join('\n');
+
+    var tools = [{
+      type: 'web_fetch_20260318', name: 'web_fetch',
+      max_uses: 4, max_content_tokens: 25000,
+      allowed_domains: [host, 'www.' + host]
+    }];
+
+    return callClaude([{ role: 'user', content: prompt }], WEB_SYSTEM, 4000, tools).then(function (res) {
+      var errs = fetchErrors(res);
+      var text = textOf(res);
+      var o;
+      try { o = extractObject(text); }
+      catch (e) {
+        if (errs.length) throw new Error('Couldn\'t open that website (' + errs[0].replace(/_/g, ' ') + '). Check the link works in your browser.');
+        throw e;
+      }
+      var have = {};
+      (item.tags || []).forEach(function (t) { have[t.toLowerCase()] = true; });
+      var tags = (Array.isArray(o.tags) ? o.tags : []).map(function (t) {
+        var tag = CJ.canonicalTag ? CJ.canonicalTag(slugTag(t.tag || t)) : slugTag(t.tag || t);
+        return { tag: tag, why: String(t.why || '').slice(0, 140) };
+      }).filter(function (t) { return t.tag && !have[t.tag.toLowerCase()]; }).slice(0, 12);
+      var ideas = (Array.isArray(o.ideas) ? o.ideas : []).slice(0, 8).map(function (x, i) {
+        return {
+          id: 'w' + Date.now().toString(36) + i,
+          title: String(x.title || '').slice(0, 90),
+          angle: String(x.angle || '').slice(0, 220),
+          hook: String(x.hook || '').slice(0, 160),
+          months: (Array.isArray(x.months) ? x.months : []).map(Number).filter(function (m) { return m >= 1 && m <= 12; }),
+          format: x.format === 'carousel' ? 'carousel' : 'reel',
+          scheduledIdeaId: null
+        };
+      }).filter(function (x) { return x.title; });
+      var f = o.facts || {};
+      return {
+        url: url,
+        readAt: new Date().toISOString(),
+        summary: String(o.summary || '').slice(0, 400),
+        neighborhood: o.neighborhood ? String(o.neighborhood).slice(0, 40) : null,
+        facts: {
+          hours: String(f.hours || '').slice(0, 160), reservations: String(f.reservations || '').slice(0, 120),
+          price: String(f.price || '').slice(0, 8), happyHour: String(f.happyHour || '').slice(0, 160),
+          parking: String(f.parking || '').slice(0, 160)
+        },
+        suggestedTags: tags,
+        ideas: ideas
+      };
+    });
+  }
+
+  CJ.ai = { hasKey: hasKey, generateIdeas: generateIdeas, punchUp: punchUp, test: test,
+            readWebsite: readWebsite, DEFAULT_MODEL: DEFAULT_MODEL };
 
 })(window.CJ);

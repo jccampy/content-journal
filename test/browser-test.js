@@ -46,6 +46,10 @@ const ok = (b) => (b ? '✓' : '✗ FAIL');
   console.log('empty state:', await page.locator('#library-body .empty h3').textContent());
 
   /* ---------- 1. seed ---------- */
+  // This suite covers the multi-platform rollout engine, so run it with all
+  // three platforms on (postsPerWeek: null = the original concepts-per-month
+  // mode). The Instagram-only weekly cadence has its own suite: cadence-test.
+  await page.evaluate(() => CJ.updateSettings({ postsPerWeek: null }));
   await page.click('#tabs .tab[data-view="settings"]');
   await page.click('#btn-seed');
   await page.waitForTimeout(1200);
@@ -153,7 +157,9 @@ const ok = (b) => (b ? '✓' : '✗ FAIL');
     CJ.getDrops().forEach(({ drop }) => {
       if (drop.platform === 'pinterest' && drop.format !== 'pins') bad.push('pinterest ' + drop.format);
       if (drop.platform === 'tiktok' && drop.format !== 'video') bad.push('tiktok ' + drop.format);
-      if (drop.platform === 'instagram' && drop.format === 'carousel' && drop.itemIds.length < min) {
+      // A photos-only place makes it a carousel at any size (v2.2).
+      const photos = drop.itemIds.some(id => (CJ.getItem(id) || {}).photosOnly);
+      if (drop.platform === 'instagram' && drop.format === 'carousel' && drop.itemIds.length < min && !photos) {
         bad.push('carousel with ' + drop.itemIds.length);
       }
     });

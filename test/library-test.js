@@ -42,7 +42,8 @@ const chips = p => p.evaluate(() => [...document.querySelectorAll('#f-tag-chips 
   await page.route('**/fonts.googleapis.com/**', r => r.abort());
   await page.goto('http://localhost:8903/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(600);
-  await page.evaluate(() => { CJ.wipe(); CJ.settingsUI.seed(); });
+  // Platform-lane assertions below assume every platform is on.
+  await page.evaluate(() => { CJ.wipe(); CJ.updateSettings({ postsPerWeek: null }); CJ.settingsUI.seed(); });
   await page.waitForTimeout(700);
   await page.evaluate(() => CJ.app.showView('library'));
   await page.waitForTimeout(400);
@@ -144,7 +145,7 @@ const chips = p => p.evaluate(() => [...document.querySelectorAll('#f-tag-chips 
 
   // An experience should be off Instagram under her default lanes.
   const dots = await page.evaluate(() => {
-    const it = CJ.getItems().find(i => i.type === 'experience');
+    const it = CJ.getItems().find(i => i.type === 'experience' && !i.photosOnly);
     const row = [...document.querySelectorAll('.lib-row')].find(r => r.querySelector('.row-title').textContent === it.name);
     return [...row.querySelectorAll('.pdot')].map(d => ({ t: d.textContent, off: d.className.includes('is-off') }));
   });

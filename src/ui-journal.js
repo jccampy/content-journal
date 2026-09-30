@@ -169,6 +169,9 @@
     }
     body.appendChild(laneStatus(item));
 
+    var web = CJ.websiteUI && CJ.websiteUI.journalSection(item);
+    if (web) body.appendChild(web);
+
     var e = entriesFor(item);
 
     body.appendChild(el('h4', { class: 'jr-section', text: 'Coming up' }));
@@ -206,6 +209,9 @@
     CJ.subscribe(function () { if (openId && !$('#journal-modal').hidden) render(); });
   }
 
-  CJ.journalUI = { init: init, open: open, close: close, entriesFor: entriesFor };
+  CJ.journalUI = {
+    init: init, open: open, close: close, entriesFor: entriesFor,
+    refresh: function () { if (openId && !$('#journal-modal').hidden) render(); }
+  };
 
 })(window.CJ);

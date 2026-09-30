@@ -8,6 +8,17 @@ library will be exactly where you left it.
 
 ---
 
+## If the page looks broken right after an update
+
+Giant black icons, doubled labels ("OverviewHome"), or no styling at all usually means
+your browser is showing an old cached stylesheet next to the new page. Do a hard refresh:
+**Cmd + Shift + R** on a Mac, **Ctrl + Shift + R** on Windows, or on a phone close the tab
+and reopen it. From v2.1 on, every file link in `index.html` ends in `?v=…`, and that
+number changes with each zip, which stops this happening. If it still looks wrong after a
+hard refresh, the `assets` folder probably didn't upload (see below).
+
+---
+
 ## The one thing that goes wrong
 
 GitHub's uploader keeps folder structure **only if you drag the folders themselves.**

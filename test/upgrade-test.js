@@ -94,6 +94,38 @@ function check(label, cond, extra) {
   const subjectOk = await page.evaluate(() => CJ.collectionsUI.subjectTags().every(s => s.n >= 2));
   check('subjects are tags on 2+ places', subjectOk);
 
+  console.log('--- shelf + groups ---');
+  await page.click('#lib-mode button[data-mode="places"]');
+  await page.evaluate(() => CJ.library.clearFilters());
+  await page.waitForTimeout(150);
+  const rowCount = () => page.evaluate(() => document.querySelectorAll('#library-body .lib-row, #library-body .item-card').length);
+  const all = await rowCount();
+  check('shelf has smart lists, type, location and subject', (await page.locator('.shelf-sec h4').allTextContents()).join('|') === 'Smart lists|Readiness|Type|Location|Subject');
+  check('grouped by type by default', (await page.locator('button.group-head').count()) === 3);
+  await page.locator('.shelf-item', { hasText: hood }).first().click();
+  await page.waitForTimeout(150);
+  const shelfN = Number(await page.locator('.shelf-item.is-on .shelf-n').textContent());
+  check('a location shelf filters to exactly its count', (await rowCount()) === shelfN && shelfN === expected, (await rowCount()) + ' / ' + shelfN);
+  const subj = page.locator('.shelf-sec').nth(4).locator('.shelf-item').first();
+  const subjN = Number(await subj.locator('.shelf-n').textContent());
+  await subj.click();
+  await page.waitForTimeout(150);
+  check('a subject shelf replaces the location filter', (await rowCount()) === subjN, (await rowCount()) + ' vs ' + subjN);
+  await page.locator('.shelf-item', { hasText: 'All places' }).click();
+  await page.waitForTimeout(150);
+  check('All places restores the full list', (await rowCount()) === all);
+  const firstGroupRows = await page.locator('.group-block').first().locator('.lib-row').count();
+  await page.locator('button.group-head').first().click();
+  await page.waitForTimeout(150);
+  check('folding a group hides just its rows', (await rowCount()) === all - firstGroupRows);
+  await page.locator('button.group-head').first().click();
+  await page.selectOption('#group-by', 'neighborhood');
+  check('grouping choice is remembered', await page.evaluate(() => CJ.settings().libraryGroup) === 'neighborhood');
+  await page.selectOption('#group-by', 'type');
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  check('every stylesheet and script link is versioned (no stale-cache mismatch)',
+    !/(href="assets\/styles\.css"|src="src\/[a-z-]+\.js")/.test(html));
+
   console.log('--- journal ---');
   const target = await page.evaluate(() => {
     const drops = CJ.getDrops().filter(e => e.drop.status !== 'dismissed' && e.drop.date >= CJ.todayISO());
@@ -123,7 +155,9 @@ function check(label, cond, extra) {
   await page.waitForTimeout(200);
   check('plan builder opens', await page.locator('#plan-modal').isVisible());
   await page.locator('.plan-seg').first().locator('button', { hasText: '3 months' }).click();
-  await page.locator('.plan-seg').nth(1).locator('button', { hasText: 'Light' }).click();
+  // Instagram 5 → 4 a week, turn Pinterest on at 1.
+  await page.locator('.ppw-row', { hasText: 'Instagram' }).locator('.ppw-btn').first().click();
+  await page.locator('.ppw-row', { hasText: 'Pinterest' }).locator('.ppw-btn').last().click();
   await page.selectOption('#plan-focus', 'neighborhood::' + hood);
   await page.waitForTimeout(100);
   check('summary names the focus', (await page.locator('.plan-summary').textContent()).indexOf(hood) !== -1);
@@ -131,7 +165,7 @@ function check(label, cond, extra) {
   await page.waitForTimeout(1500);
   const st = await page.evaluate(() => CJ.settings());
   check('horizon saved', st.horizonMonths === 3);
-  check('pace saved', st.ideasPerMonth === 4);
+  check('posts per week saved', st.postsPerWeek.instagram === 4 && st.postsPerWeek.pinterest === 1 && st.postsPerWeek.tiktok === 0);
   check('focus saved', st.planFocus && st.planFocus.value === hood);
   check('calendar horizon select follows', (await page.inputValue('#cal-months')) === '3');
   const after = await page.evaluate(id => { const f = CJ.getDrop(id); return f && { date: f.drop.date, status: f.drop.status }; }, locked.id);

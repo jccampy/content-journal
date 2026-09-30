@@ -68,12 +68,30 @@
     if (item.neighborhood) bag.push(item.neighborhood);
     if (item.name) bag.push(item.name);
     if (item.notes) bag.push(item.notes);
+    // What its own website says it is ("rooftop bar with brunch") is fair
+    // game for matching it to themes and occasions.
+    if (item.web && item.web.summary) bag.push(item.web.summary);
     (item.layers || []).forEach(function (l) {
       if (l.label) bag.push(l.label);
       if (l.notes) bag.push(l.notes);
       (l.tags || []).forEach(function (t) { bag.push(t); });
     });
     return bag;
+  }
+
+  /**
+   * Is this neighborhood the event's area? Whole-name match only. The old
+   * substring test put West Midtown inside "Midtown" (and would have put
+   * Downtown Decatur inside "Downtown"), so a Midtown guide listed West
+   * Midtown spots. "Old Fourth Ward" still matches "old 4th ward"-style
+   * spellings via the normaliser.
+   */
+  function sameArea(hood, area) {
+    function norm(x) {
+      return String(x || '').toLowerCase().replace(/&/g, 'and').replace(/\b4th\b/g, 'fourth')
+        .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    return !!hood && norm(hood) === norm(area);
   }
 
   /** Neighborhood names that appear in an occasion's angles. */
@@ -133,6 +151,10 @@
     // the place itself has been featured before.
     var unused = CJ.unusedLayers(item).length;
     if (unused) s += 45 + Math.min(unused, 3) * 10;
+
+    // Cadence mode, building a roundup: a place that can carry its own post is
+    // worth more alone, so roundups lean on the places that can't.
+    if (ctx.roundup && item.solo) s -= 35;
 
     // Something you've already run four times is less fresh than something
     // you've run once, even if both were a year ago.
@@ -221,7 +243,7 @@
     var out = {};
 
     CJ.PLATFORM_IDS.forEach(function (p) {
-      if (items.some(function (it) { return CJ.itemAllowsPlatform(it, p); })) out[p] = true;
+      if (items.some(function (it) { return CJ.itemPostsOn(it, p); })) out[p] = true;
     });
 
     // An itinerary or a day-in-the-life is Atlanta lifestyle content, which is
@@ -229,7 +251,8 @@
     // explicit "never on TikTok" on the places still wins.
     if (theme && (theme.format === 'guide' || theme.format === 'vlog')) {
       var anyOkOnTikTok = items.some(function (it) { return CJ.fitFor(it, 'tiktok') !== 'no'; });
-      if (anyOkOnTikTok && (!rules.experience || rules.experience.tiktok !== false)) out.tiktok = true;
+      if (anyOkOnTikTok && CJ.platformActive('tiktok') &&
+          (!rules.experience || rules.experience.tiktok !== false)) out.tiktok = true;
     }
 
     return CJ.PLATFORM_IDS.filter(function (p) { return out[p]; });
@@ -256,7 +279,14 @@
   /** Which platform this concept leads on — food leads on IG, Atlanta on TikTok. */
   function leadPlatformFor(items, settings) {
     var lead = (settings.rollout && settings.rollout.leadBy) || {};
-    return lead[dominantType(items)] || 'instagram';
+    var want = lead[dominantType(items)] || 'instagram';
+    if (CJ.platformActive(want)) return want;
+    // That lane is paused — lead on an active platform these places belong on.
+    var active = CJ.PLATFORM_IDS.filter(CJ.platformActive);
+    for (var i = 0; i < active.length; i++) {
+      if ((items || []).some(function (it) { return CJ.itemPostsOn(it, active[i]); })) return active[i];
+    }
+    return active[0] || want;
   }
 
   /**
@@ -264,9 +294,12 @@
    * carousel; a tighter group is a reel. Pinterest is always a set of pins, one
    * per place, pointing back at the video.
    */
-  function formatFor(platform, count, theme, settings) {
+  function formatFor(platform, count, theme, settings, items) {
     if (platform === 'pinterest') return 'pins';
     if (platform === 'tiktok') return 'video';
+    // Any photos-only place in the line-up means Instagram gets stills: a
+    // carousel (a single place's photos are a carousel too).
+    if ((items || []).some(function (it) { return it && it.photosOnly; })) return 'carousel';
     if (theme && (theme.format === 'single' || theme.format === 'vlog' || theme.format === 'split')) return 'reel';
     return count >= (settings.carouselMinItems || 5) ? 'carousel' : 'reel';
   }
@@ -280,7 +313,7 @@
    * Each drop re-checks the spacing rule for its own platform and date, and a
    * platform is simply skipped if too many of the places are still resting there.
    */
-  function buildDrops(ideaId, chosen, theme, baseDate, settings, spacer) {
+  function buildDrops(ideaId, chosen, theme, baseDate, settings, spacer, slots, reservedFor) {
     var platforms = platformsFor(chosen, theme, settings);
     if (!platforms.length || !chosen.length) return [];
 
@@ -298,26 +331,51 @@
 
     var start = CJ.parseDate(baseDate);
     var drops = [];
+    var reservedUsed = false;
     var minKeep = Math.max(1, Math.ceil(chosen.length / 2));
 
     order.forEach(function (p, i) {
       var date = CJ.isoDate(addDays(start, i * gap));
+      var booked = false, usingReserved = false;
+      // Cadence mode: every drop takes a real slot on its own platform. The
+      // caller already booked baseDate for `reservedFor`; the rest find the
+      // next free slot on their own platform.
+      if (slots && slots.on) {
+        if (p === reservedFor && !reservedUsed) { date = baseDate; usingReserved = true; }
+        else {
+          date = slots.place(CJ.parseDate(date), CJ.parseDate(date), addDays(CJ.parseDate(date), 10), p);
+          if (!date) return;
+          booked = true;
+        }
+      }
       var free = chosen.filter(function (it) {
-        if (!CJ.itemAllowsPlatform(it, p)) return false;   // wrong home for this one
+        if (!CJ.itemPostsOn(it, p)) return false;        // wrong home, or a paused platform
+        if (!CJ.usableOn(it, date)) return false;        // on hold, or out of season on this date
         return spacer.allows(it, p, date);
       });
-      if (free.length < minKeep) return;   // too little of the line-up belongs here
+      if (free.length < minKeep) {                         // too little of the line-up belongs here
+        if (booked) slots.release(p, date);
+        return;
+      }
+      // A post of ONE place needs a place you marked "enough for its own
+      // post". Otherwise it only goes out alongside others. Deadlines are
+      // exempt: a commitment gets posted either way.
+      if (free.length === 1 && !free[0].solo && !(theme && theme.allowSingle)) {
+        if (booked) slots.release(p, date);
+        return;
+      }
+      if (usingReserved) reservedUsed = true;
 
       var layerByItem = {};
       free.forEach(function (it) {
-        var l = CJ.bestLayerFor(it, p);
+        var l = CJ.bestLayerFor(it, p, date);
         if (l) layerByItem[it.id] = l.id;
       });
 
       drops.push({
         id: ideaId + '::' + p,
         platform: p,
-        format: formatFor(p, free.length, theme, settings),
+        format: formatFor(p, free.length, theme, settings, free),
         date: date,
         itemIds: free.map(function (it) { return it.id; }),
         layerByItem: layerByItem,
@@ -330,6 +388,8 @@
 
       free.forEach(function (it) { spacer.record(it.id, p, date); });
     });
+    // The caller's slot went unused (that platform dropped out): give it back.
+    if (slots && slots.on && reservedFor && !reservedUsed) slots.release(reservedFor, baseDate);
     return drops;
   }
 
@@ -369,24 +429,72 @@
 
   /* ---------- date placement ---------- */
 
+  /*
+   * Two modes.
+   *
+   * LEGACY (settings.postsPerWeek is null): one concept per day, preferring
+   * your posting days, falling back to any free day. This is the original
+   * behaviour and the one the older tests pin down.
+   *
+   * CADENCE (postsPerWeek set): each platform has real weekly SLOTS — its
+   * posting days (CJ.slotDays), one post per slot. A date is only ever handed
+   * out if it is a free slot for that platform, so a week can never hold more
+   * posts than you asked for. No slot in range → null, and the caller skips.
+   * Deadlines pass {force:true}: a due date outranks the cadence.
+   */
   function makeDatePicker(settings) {
     var preferred = (settings.preferredDays && settings.preferredDays.length) ? settings.preferredDays : [2, 4, 6];
+    var cadence = CJ.cadenceOn();
+    var dayCache = {};
+    function daysFor(p) { return dayCache[p] || (dayCache[p] = CJ.slotDays(p)); }
     var taken = {};
-    return function place(target, minDate, maxDate) {
+    function key(p, iso) { return cadence ? (p || 'instagram') + '|' + iso : iso; }
+
+    function place(target, minDate, maxDate, platform, opts) {
+      opts = opts || {};
       var d = new Date(target.getTime());
       d = clampDate(d, minDate, maxDate);
+
+      if (cadence) {
+        var p = platform || 'instagram';
+        var days = daysFor(p);
+        if (days.length) {
+          for (var r = 0; r <= 62; r++) {
+            var cs = r === 0 ? [0] : [-r, r];
+            for (var j = 0; j < cs.length; j++) {
+              var c = addDays(d, cs[j]);
+              if (minDate && c < minDate) continue;
+              if (maxDate && c > maxDate) continue;
+              if (days.indexOf(c.getDay()) === -1) continue;
+              var k = key(p, CJ.isoDate(c));
+              if (taken[k]) continue;
+              taken[k] = true;
+              return CJ.isoDate(c);
+            }
+          }
+        }
+        if (!opts.force) return null;
+        // A deadline with no slot left: take the nearest free day of any kind.
+        for (var f = 0; f <= 14; f++) {
+          var alt0 = addDays(d, f);
+          var kf = key(p, CJ.isoDate(alt0));
+          if (!taken[kf]) { taken[kf] = true; return CJ.isoDate(alt0); }
+        }
+        return CJ.isoDate(d);
+      }
+
       // Walk outward from the target looking for a preferred, unclaimed day.
       for (var radius = 0; radius <= 10; radius++) {
         var candidates = radius === 0 ? [0] : [-radius, radius];
-        for (var c = 0; c < candidates.length; c++) {
-          var cand = addDays(d, candidates[c]);
+        for (var c2 = 0; c2 < candidates.length; c2++) {
+          var cand = addDays(d, candidates[c2]);
           if (minDate && cand < minDate) continue;
           if (maxDate && cand > maxDate) continue;
-          var key = CJ.isoDate(cand);
+          var key2 = CJ.isoDate(cand);
           if (preferred.indexOf(cand.getDay()) === -1) continue;
-          if (taken[key]) continue;
-          taken[key] = true;
-          return key;
+          if (taken[key2]) continue;
+          taken[key2] = true;
+          return key2;
         }
       }
       // No preferred day free — take any free day near the target.
@@ -397,7 +505,23 @@
         if (!taken[k2]) { taken[k2] = true; return k2; }
       }
       return CJ.isoDate(d);
+    }
+
+    place.on = cadence;
+    place.place = place;
+    place.reserve = function (p, iso) { taken[key(p, iso)] = true; };
+    place.release = function (p, iso) { delete taken[key(p, iso)]; };
+    place.isHeld = function (p, iso) { return !!taken[key(p, iso)]; };
+    /** Free slot dates for a platform between two Dates, in order. */
+    place.freeSlots = function (p, from, to) {
+      var out = [], days = daysFor(p);
+      for (var x = new Date(from.getTime()); x <= to; x = addDays(x, 1)) {
+        if (days.indexOf(x.getDay()) === -1) continue;
+        if (!taken[key(p, CJ.isoDate(x))]) out.push(CJ.isoDate(x));
+      }
+      return out;
     };
+    return place;
   }
 
   /* ---------- the main event ---------- */
@@ -421,9 +545,36 @@
     var end = new Date(today.getFullYear(), today.getMonth() + horizon, 0);
 
     var items = CJ.getItems();
-    var planItems = focus
+    var cadence = CJ.cadenceOn();
+    var activePlatforms = CJ.PLATFORM_IDS.filter(CJ.platformActive);
+    // The busiest active platform sets the monthly rhythm in cadence mode.
+    var primary = activePlatforms.slice().sort(function (a, b) {
+      return ((settings.postsPerWeek || {})[b] || 0) - ((settings.postsPerWeek || {})[a] || 0);
+    })[0] || 'instagram';
+    if (cadence) perMonth = Math.round(((settings.postsPerWeek || {})[primary] || 0) * 52 / 12);
+
+    /* What a plan may build from: places that can actually post somewhere
+       you're posting right now, and that aren't on hold. Held places (your
+       notes say there isn't enough for a post yet) sit out until you add more
+       or tell it to use them anyway. It's fine for a lot of the library to
+       sit out — a thin post is worse than no post. Deadlines are the one
+       exception, further down: a commitment still gets placed. */
+    var planItems = (focus
       ? items.filter(function (it) { return CJ.matchesCollection(it, focus); })
-      : items;
+      : items
+    ).filter(function (it) {
+      if (CJ.holdInfo(it).held) return false;
+      return activePlatforms.some(function (p) { return CJ.itemPostsOn(it, p); });
+    });
+
+    // "Can this place post at some point in this range?" gets asked a lot for
+    // the same month; cache it.
+    var rangeCache = {};
+    function usableIn(it, fromD, toD) {
+      var k = it.id + '|' + CJ.isoDate(fromD) + '|' + CJ.isoDate(toD);
+      if (!(k in rangeCache)) rangeCache[k] = CJ.usableBetween(it, CJ.isoDate(fromD), CJ.isoDate(toD));
+      return rangeCache[k];
+    }
     var existing = CJ.getIdeas();
     var knownNeighborhoods = CJ.allNeighborhoods();
 
@@ -503,9 +654,18 @@
     var ctxBase = { cooldown: cooldown, used: usedCount, hookRotation: Math.floor(Math.random() * 7) };
     var pickDate = makeDatePicker(settings);
     // Reserve every date a live kept idea is sitting on. Dismissed ones release
-    // theirs so the replacement can take that day.
+    // theirs so the replacement can take that day. In cadence mode each kept
+    // drop holds its own platform's slot, so a planned post counts toward
+    // that week's number.
     kept.forEach(function (idea) {
-      if (idea.date && !isDismissed(idea)) pickDate(CJ.parseDate(idea.date), null, null);
+      if (!idea.date || isDismissed(idea)) return;
+      if (cadence) {
+        (idea.drops || []).forEach(function (d) {
+          if (d.status !== 'dismissed' && d.date) pickDate.reserve(d.platform, d.date);
+        });
+      } else {
+        pickDate(CJ.parseDate(idea.date), null, null);
+      }
     });
 
     // Seed the spacing rule with real history and everything already booked.
@@ -527,7 +687,9 @@
     });
 
     var fresh = [];
-    var stats = { deadline: 0, occasion: 0, theme: 0, skippedThin: 0, spacingBlocks: 0,
+    var stats = { deadline: 0, occasion: 0, theme: 0, spotlight: 0, skippedThin: 0, spacingBlocks: 0,
+                  held: items.filter(function (it) { return CJ.holdInfo(it).held; }).map(function (it) { return it.name; }),
+                  cadence: cadence ? { platform: primary, perWeek: (settings.postsPerWeek || {})[primary] || 0 } : null,
                   shortMonths: 0, shortBy: 0, uncovered: [],
                   locked: 0, dismissed: freedSlots, escapes: 0, areaSkipped: [],
                   focus: focus ? CJ.collectionLabel(focus) : null, focusPlaces: planItems.length };
@@ -536,6 +698,8 @@
     function freeOn(pool, isoDate, platform) {
       var out = [];
       for (var i = 0; i < pool.length; i++) {
+        // In season on this date, and with a clip that isn't on hold.
+        if (!CJ.usableOn(pool[i], isoDate)) continue;
         if (spacer.allows(pool[i], platform, isoDate)) out.push(pool[i]);
         else stats.spacingBlocks++;
       }
@@ -555,7 +719,8 @@
 
       var overdue = due < today;
       var target = overdue ? today : addDays(due, -5);
-      var date = pickDate(target, today, overdue ? addDays(today, 10) : due);
+      var dlLead = leadPlatformFor([item], settings);
+      var date = pickDate(target, today, overdue ? addDays(today, 10) : due, dlLead, { force: true });
 
       var ctx = Object.assign({}, ctxBase, {
         season: seasonOf(due.getMonth() + 1),
@@ -563,16 +728,17 @@
         name: item.name, n: 1
       });
 
-      var dlDrops = buildDrops(id, [item], { format: 'single' }, date, settings, spacer);
+      var dlDrops = buildDrops(id, [item], { format: 'single', allowSingle: true }, date, settings, spacer, pickDate, dlLead);
       if (!dlDrops.length) {
         // Spacing blocked every platform — place it anyway on the lead one,
         // because a deadline outranks the rule.
-        var lp = leadPlatformFor([item], settings);
-        var lyr = CJ.bestLayerFor(item, lp);
+        var lp = dlLead;
+        if (cadence) pickDate.reserve(lp, date);
+        var lyr = CJ.bestLayerFor(item, lp, date);
         var lbi = {}; if (lyr) lbi[item.id] = lyr.id;
         dlDrops = [{
           id: id + '::' + lp, platform: lp,
-          format: formatFor(lp, 1, { format: 'single' }, settings),
+          format: formatFor(lp, 1, { format: 'single' }, settings, [item]),
           date: date, itemIds: [item.id], layerByItem: lbi, linksTo: null,
           status: 'suggested', pinned: false, touched: false, notes: ''
         }];
@@ -586,9 +752,12 @@
         source: 'deadline',
         themeId: null,
         title: (overdue ? '⚠️ Overdue: ' : '⏰ Post by ' + CJ.formatDate(item.deadline, { month: 'short', day: 'numeric' }) + ': ') + item.name,
-        blurb: item.deadlineNote
+        blurb: (item.deadlineNote
           ? item.deadlineNote
-          : 'You flagged this one as time-sensitive when you added it.',
+          : 'You flagged this one as time-sensitive when you added it.') +
+          (CJ.holdInfo(item).held
+            ? ' ⚠ Heads up: this place is on hold (' + CJ.holdInfo(item).reason + '). It\'s here because the deadline outranks that — shoot what you need before this date.'
+            : ''),
         format: 'single',
         itemIds: [item.id],
         platforms: dlDrops.map(function (d) { return d.platform; }),
@@ -667,7 +836,7 @@
         if (!area.length) return true;
         var hood = (it.neighborhood || '').toLowerCase();
         if (!hood) return false;
-        return area.some(function (a) { return hood === a || hood.indexOf(a) !== -1 || a.indexOf(hood) !== -1; });
+        return area.some(function (a) { return sameArea(hood, a); });
       }
 
       function matchesAngle(it) {
@@ -678,7 +847,15 @@
         return false;
       }
 
-      var typeOk = planItems.filter(function (it) { return !occ.types || occ.types.indexOf(it.type) !== -1; });
+      // Only places that can genuinely post in the run-up to this date: in
+      // season then, and not on hold. Halloween content is for Halloween.
+      var runFrom = addDays(occ.date, -((occ.lead || 12) + 10));
+      if (runFrom < today) runFrom = today;
+      var runTo = addDays(occ.date, -1) < runFrom ? runFrom : addDays(occ.date, -1);
+      var typeOk = planItems.filter(function (it) {
+        if (occ.types && occ.types.indexOf(it.type) === -1) return false;
+        return usableIn(it, runFrom, runTo);
+      });
 
       // In-area candidates: right place, and either the right vibe or simply
       // being in the right place (which is itself the point of a local guide).
@@ -732,7 +909,11 @@
       });
     });
 
-    var occPerMonth = Math.max(2, Math.ceil((settings.ideasPerMonth || 8) * 0.45));
+    // Cadence mode keeps holiday/event posts to about half your weekly number
+    // per month: each one books up to 4 places for the whole spacing gap.
+    var occPerMonth = cadence
+      ? Math.max(2, Math.ceil(((settings.postsPerWeek || {})[primary] || 0) * 0.5))
+      : Math.max(2, Math.ceil(perMonth * 0.45));
     var occTakenByMonth = {};
     occCandidates.sort(function (a, b) { return b.score - a.score; });
 
@@ -751,17 +932,25 @@
 
       // Date first, then places — the spacing rule can only be applied once we
       // know when the post is going up.
-      var postDate = pickDate(addDays(occ.date, -(occ.lead || 12)), today, addDays(occ.date, -1));
       var occLead = leadPlatformFor(pool.length ? pool : planItems, settings);
-      var occCtx = Object.assign({}, ctxBase, { platform: occLead });
-      var chosen = pool.length ? pickItems(freeOn(pool, postDate, occLead), { max: 6 }, occCtx, 6) : [];
-      if (!chosen.length && occ.kind !== 'custom') { stats.skippedThin++; return; }
+      var postDate = pickDate(addDays(occ.date, -(occ.lead || 12)), today, addDays(occ.date, -1), occLead);
+      if (!postDate) { stats.noSlot = (stats.noSlot || 0) + 1; return; }
+      var occCtx = Object.assign({}, ctxBase, { platform: occLead, roundup: cadence });
+      // Cadence mode caps holiday line-ups at 4: each place in a post is
+      // booked for the whole spacing gap, so a 6-place post empties the month.
+      var occMax = cadence ? 4 : 6;
+      var chosen = pool.length ? pickItems(freeOn(pool, postDate, occLead), { max: occMax }, occCtx, occMax) : [];
+      if (!chosen.length && occ.kind !== 'custom') {
+        stats.skippedThin++;
+        if (cadence) pickDate.release(occLead, postDate);
+        return;
+      }
       ctx.n = chosen.length;
 
       var occDrops = chosen.length
-        ? buildDrops(id, chosen, { format: 'guide' }, postDate, settings, spacer)
+        ? buildDrops(id, chosen, { format: 'guide' }, postDate, settings, spacer, pickDate, occLead)
         : [{
-            id: id + '::instagram', platform: 'instagram', format: 'reel', date: postDate,
+            id: id + '::' + occLead, platform: occLead, format: occLead === 'tiktok' ? 'video' : 'reel', date: postDate,
             itemIds: [], layerByItem: {}, linksTo: null,
             status: 'suggested', pinned: false, touched: false, notes: ''
           }];
@@ -834,6 +1023,120 @@
       stats.occasion++;
     });
 
+    /* --- spotlights: one place, one post -----------------------------------
+       Your standard feature format (what it is, the vibe, what to order, good
+       to know). Fills free slots in date order with the most-due place that is
+       free under the spacing rule, in season that day, and not on hold. It
+       will leave a slot empty rather than post something that doesn't fit. */
+    var SPOT_HOOKS = {
+      restaurant: ['What to order at {name}', 'This is the one: {name}', 'Make the reservation: {name}'],
+      experience: ['{name} is worth the trip', 'Your next plan: {name}', 'Save this for the weekend: {name}'],
+      home: ['{name}', 'The at-home version: {name}', 'Doing this again: {name}']
+    };
+    function placeSpotlights(mi, monthStart, monthEnd, mk, info, remaining, onPlaced) {
+      var dates = pickDate.freeSlots(primary, monthStart, monthEnd);
+      for (var di = 0; di < dates.length && remaining() > 0; di++) {
+        var date = dates[di];
+        if (weekFull(date)) continue;
+        var ctxS = Object.assign({}, ctxBase, { platform: primary });
+        var best = null, bestScore = -Infinity;
+        planItems.forEach(function (it) {
+          if (!it.solo) return;                                      // you said it can't carry a post alone
+          if (!CJ.itemPostsOn(it, primary)) return;
+          if (keptIds['spot:' + it.id + ':' + mk]) return;           // dismissed or kept already
+          if (fresh.some(function (f) { return f.id === 'spot:' + it.id + ':' + mk; })) return;
+          if (!CJ.usableOn(it, date)) return;
+          if (!spacer.allows(it, primary, date)) return;
+          var sc = itemScore(it, ctxS) + seasonTiming(it, date);
+          if (sc > bestScore) { bestScore = sc; best = it; }
+        });
+        if (!best) continue;
+        var id = 'spot:' + best.id + ':' + mk;
+        pickDate.reserve(primary, date);
+        var drops = buildDrops(id, [best], { format: 'single' }, date, settings, spacer, pickDate, primary);
+        if (!drops.length) continue;
+        var layer = CJ.getLayer(best, drops[0].layerByItem[best.id]);
+        var sctx = Object.assign({}, ctxBase, { season: info.season, month: info.name, name: best.name, n: 1 });
+        fresh.push({
+          id: id,
+          date: drops[0].date,
+          drops: drops,
+          source: 'spotlight',
+          themeId: 'spotlight',
+          title: best.type === 'restaurant' ? 'Spotlight: ' + best.name : best.name,
+          blurb: 'A single-place feature' + (best.neighborhood ? ' in ' + best.neighborhood : '') +
+                 (layer && (best.layers || []).length > 1 ? ', using your “' + layer.label + '” clip' : '') +
+                 (best.photosOnly ? '. Photos only, so it runs as a carousel' : '') +
+                 '. Run it in your usual format: what it is, the vibe, what to order, good to know.',
+          format: 'single',
+          itemIds: [best.id],
+          platforms: drops.map(function (d) { return d.platform; }),
+          // Hooks from its own website come first: they name real dishes and events.
+          hooks: ((best.web && best.web.ideas) || []).filter(function (x) {
+            return x.hook && !x.scheduledIdeaId && (!x.months || !x.months.length || x.months.indexOf(Number(date.slice(5, 7))) !== -1);
+          }).map(function (x) { return x.hook; }).slice(0, 2)
+            .concat((SPOT_HOOKS[best.type] || SPOT_HOOKS.restaurant).map(function (h) { return fill(h, sctx); })).slice(0, 4),
+          captions: buildCaptions({ format: 'single' }, [best], sctx),
+          occasion: null,
+          deadlineFor: null,
+          status: 'suggested',
+          pinned: false,
+          touched: false,
+          priority: 0,
+          notes: '',
+          weatherNote: info.mood
+        });
+        usedCount[best.id] = (usedCount[best.id] || 0) + 1;
+        stats.spotlight++;
+        onPlaced();
+      }
+    }
+
+    /* --- even pacing -------------------------------------------------------
+       If the library can carry fewer posts a week than you asked for, spread
+       what it can carry evenly instead of filling the first few weeks to the
+       brim and then going silent for a month while every place rests. */
+    var weekCap = 7;
+    if (cadence) {
+      var want = (settings.postsPerWeek || {})[primary] || 0;
+      var capNow = capacity(primary).perWeek;
+      weekCap = Math.max(1, Math.min(want, Math.ceil(capNow)));
+    }
+    function weekKeyOf(iso) {
+      var d = CJ.parseDate(iso);
+      d.setDate(d.getDate() - ((d.getDay() + 6) % 7));        // back to Monday
+      return CJ.isoDate(d);
+    }
+    function weekFull(iso) {
+      if (!cadence) return false;
+      var wk = weekKeyOf(iso), n = 0;
+      kept.concat(fresh).forEach(function (idea) {
+        if (isDismissed(idea)) return;
+        (idea.drops || []).forEach(function (d) {
+          if (d.platform === primary && d.status !== 'dismissed' && weekKeyOf(d.date) === wk) n++;
+        });
+      });
+      return n >= weekCap;
+    }
+
+    /* Seasonal content lands close to its moment: a Halloween place is worth
+       most in the last three weeks of October, not on the 1st. */
+    function seasonTiming(item, iso) {
+      var se = CJ.seasonInfo(item);
+      if (se.any) return 0;
+      var d = CJ.parseDate(iso);
+      var best = null;
+      se.windows.forEach(function (w) {
+        if (!CJ.inWindows([w], iso)) return;
+        var end = new Date(d.getFullYear(), w.to[0] - 1, w.to[1]);
+        if (end < d) end = new Date(d.getFullYear() + 1, w.to[0] - 1, w.to[1]);
+        var left = CJ.daysBetween(d, end);
+        if (best === null || left < best) best = left;
+      });
+      if (best === null) return 0;
+      return best <= 21 ? 40 : -80;
+    }
+
     /* --- 4. fill each month with the best-fitting themes --- */
     var neighborhoods = CJ.allNeighborhoods();
     var lastUsedMonth = {}; // themeId -> month index, to avoid back-to-back repeats
@@ -846,7 +1149,10 @@
       var monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
 
       var already = (keptPerMonth[mk] || 0) + fresh.filter(function (f) { return f.date.slice(0, 7) === mk; }).length;
-      var slots = Math.max(0, perMonth - already);
+      // Cadence: the month holds exactly as many posts as it has free slots.
+      var slots = cadence
+        ? pickDate.freeSlots(primary, monthStart, monthEnd).length
+        : Math.max(0, perMonth - already);
       if (slots === 0) continue;
 
       var info = CJ.atlanta.monthInfo(monthNum);
@@ -865,7 +1171,8 @@
           var pool = planItems.filter(function (it) {
             if (!itemMatchesTheme(it, theme)) return false;
             if (v.neighborhood && (it.neighborhood || '').toLowerCase() !== v.neighborhood.toLowerCase()) return false;
-            return true;
+            // Only what can post this month: in season, a clip that isn't held.
+            return usableIn(it, monthStart, monthEnd);
           });
           if (theme.needsBothTypes) {
             for (var t = 0; t < theme.needsBothTypes.length; t++) {
@@ -904,30 +1211,38 @@
 
       var placed = 0;
       var usedThemeThisMonth = {};
-      for (var ci = 0; ci < candidates.length && placed < slots; ci++) {
+      var tried = {};
+
+      function placeThemes(limit) {
+      for (var ci = 0; ci < candidates.length && placed < limit; ci++) {
         var c = candidates[ci];
+        if (tried[ci]) continue;
         // One instance per theme per month, except neighborhood guides (max 2).
         var cap = c.theme.byNeighborhood ? 2 : 1;
         if ((usedThemeThisMonth[c.theme.id] || 0) >= cap) continue;
+        tried[ci] = true;
 
         // Date first, then places, so the spacing rule can be applied. Try a
         // couple of dates before giving up — a different week in the same month
         // often frees up the places this theme needs.
         var themeLead = leadPlatformFor(c.pool, settings);
-        var themeCtx = Object.assign({}, ctxBase, { platform: themeLead });
+        var themeCtx = Object.assign({}, ctxBase, { platform: themeLead, roundup: cadence });
         var postDate = null, chosen = null;
         for (var attempt = 0; attempt < 6; attempt++) {
           var tryDate = pickDate(
             addDays(monthStart, Math.floor(Math.random() * Math.max(1, CJ.daysBetween(monthStart, monthEnd)))),
-            monthStart, monthEnd
+            monthStart, monthEnd, themeLead
           );
+          if (!tryDate) break;                     // cadence: no slot left this month
+          if (weekFull(tryDate)) { pickDate.release(themeLead, tryDate); continue; }
           var candidates2 = pickItems(freeOn(c.pool, tryDate, themeLead), c.theme, themeCtx);
           if (candidates2.length >= (c.theme.min || 1)) { postDate = tryDate; chosen = candidates2; break; }
+          if (cadence) { pickDate.release(themeLead, tryDate); continue; }
           if (!postDate) postDate = tryDate; // remember the first, in case all fail
         }
         if (!chosen) continue;
 
-        var themeDrops = buildDrops(c.id, chosen, c.theme, postDate, settings, spacer);
+        var themeDrops = buildDrops(c.id, chosen, c.theme, postDate, settings, spacer, pickDate, themeLead);
         if (!themeDrops.length) continue;
 
         var tctx = Object.assign({}, mctx, { neighborhood: c.neighborhood, n: chosen.length });
@@ -962,6 +1277,23 @@
         lastUsedMonth[c.theme.id] = mi;
         placed++;
         stats.theme++;
+      }
+      }
+
+      if (!cadence) {
+        placeThemes(slots);
+      } else {
+        /* Cadence mode fills a month in three passes. Single-place spotlights
+           first (your standard feature post) for up to ~75% of the slots,
+           then roundups, then spotlights again for anything left. Measured
+           the other way round: roundups first booked 3-5 places each for the
+           whole spacing gap and left ONE spotlight in six months. */
+        var spotCap = Math.ceil(slots * 0.75);
+        placeSpotlights(mi, monthStart, monthEnd, mk, info, function () { return Math.min(spotCap, slots) - placed; },
+          function () { placed++; });
+        placeThemes(slots);
+        placeSpotlights(mi, monthStart, monthEnd, mk, info, function () { return slots - placed; },
+          function () { placed++; });
       }
 
       // Couldn't fill the month? Almost always the spacing rule — every place
@@ -1015,7 +1347,7 @@
       if (!area.length) return true;
       var hood = (it.neighborhood || '').toLowerCase();
       if (!hood) return false;
-      return area.some(function (a) { return hood === a || hood.indexOf(a) !== -1 || a.indexOf(hood) !== -1; });
+      return area.some(function (a) { return sameArea(hood, a); });
     }
 
     var typeOk = items.filter(function (it) { return !types || types.indexOf(it.type) !== -1; });
@@ -1128,6 +1460,30 @@
 
   /* ---------- refresh ---------- */
 
+  /* ---------- capacity: how many posts a week can the library carry? ----
+     The honest ceiling. Every place can post on a platform at most once per
+     its spacing gap. A place marked "enough for its own post" can fill a slot
+     by itself; any other place only goes out in a roundup, which needs ~3-4
+     of them per post. Counts places that can post in the next 30 days (in
+     season, not on hold). A rough ceiling, not a promise — occasions and
+     line-up overlap usually land a little under it. */
+  function capacity(platform) {
+    var p = platform || 'instagram';
+    var today = CJ.todayISO();
+    var d30 = new Date(); d30.setDate(d30.getDate() + 30);
+    var to = CJ.isoDate(d30);
+    var solo = 0, group = 0, perWeek = 0, held = 0, offSeason = 0;
+    CJ.getItems().forEach(function (it) {
+      if (!CJ.itemAllowsPlatform(it, p) || (p === 'tiktok' && it.photosOnly)) return;
+      if (CJ.holdInfo(it).held) { held++; return; }
+      if (!CJ.usableBetween(it, today, to)) { offSeason++; return; }
+      var gap = CJ.minGapFor(it) || 30;
+      if (it.solo) { solo++; perWeek += 7 / gap; }
+      else { group++; perWeek += 7 / gap / 3.5; }
+    });
+    return { platform: p, perWeek: Math.round(perWeek * 10) / 10, solo: solo, group: group, held: held, offSeason: offSeason };
+  }
+
   function refresh(options) {
     var before = CJ.getIdeas().length;
     var result = generate(options);
@@ -1139,6 +1495,7 @@
   CJ.generator = {
     FORMATS: FORMATS,
     formatFor: formatFor,
+    capacity: capacity,
     leadPlatformFor: leadPlatformFor,
     generate: generate,
     refresh: refresh,

@@ -99,8 +99,13 @@
     tags: [],
     tagMode: 'any',
     sort: 'stale',
-    group: 'none'
+    group: 'type',
+    freeNow: false,     // free on at least one lane today (spacing rule lifted)
+    noHood: false,      // no neighborhood set
+    flag: null          // 'solo' | 'photos' | 'held' | 'seasonal'
   };
+
+  var collapsed = {};   // group key -> folded shut
 
   var tagQuery = '';
   var expanded = {};        // itemId -> row is showing its detail panel
@@ -144,11 +149,14 @@
    */
   function platformDots(item) {
     return el('div', { class: 'plat-dots' }, CJ.PLATFORMS.map(function (p) {
-      var allowed = CJ.itemAllowsPlatform(item, p.id);
+      var lane = CJ.itemAllowsPlatform(item, p.id);
+      var allowed = CJ.itemPostsOn(item, p.id);
       var fit = CJ.fitFor(item, p.id);
       var free = allowed ? nextFreeOn(item, p.id) : null;
       var title = p.label + ': ' +
-        (!allowed ? (fit === 'no' ? 'switched off for this place' : 'not one of your usual lanes for ' + typeInfo(item.type).label.toLowerCase())
+        (!allowed && lane && !CJ.platformActive(p.id) ? 'paused (you\'re not planning ' + p.label + ' posts right now)'
+         : !allowed && lane && item.photosOnly ? 'photos only, so no TikTok'
+         : !allowed ? (fit === 'no' ? 'switched off for this place' : 'not one of your usual lanes for ' + typeInfo(item.type).label.toLowerCase())
          : free ? 'blocked by the ' + CJ.minGapFor(item) + '-day rule until ' + CJ.formatDate(free, { month: 'short', day: 'numeric' })
          : 'free to use');
       // A letter, not the platform emoji — at 18px an emoji is a smudge and
@@ -173,11 +181,27 @@
     return (d / 365).toFixed(1).replace(/\.0$/, '') + 'y ago';
   }
 
+  /** Can post today: on an active lane, not on hold, in season, and not held
+      back by the spacing rule. */
+  function isFreeNow(item) {
+    var anyLane = CJ.PLATFORM_IDS.some(function (p) { return CJ.itemPostsOn(item, p); });
+    return anyLane && CJ.usableOn(item, CJ.todayISO()) && !nextFreeAny(item);
+  }
+
+  function hasFlag(item, f) {
+    if (f === 'solo') return !!item.solo;
+    if (f === 'photos') return !!item.photosOnly;
+    if (f === 'held') return CJ.holdInfo(item).held;
+    if (f === 'seasonal') return !CJ.seasonInfo(item).any;
+    return true;
+  }
+  var FLAG_LABELS = { solo: '★ Enough for its own post', photos: '📷 Photos only', held: '⏸ On hold', seasonal: '🗓 Seasonal' };
+
   /** The soonest date this place is free again on any lane it's cleared for. */
   function nextFreeAny(item) {
     var best = null, blocked = 0, allowed = 0;
     CJ.PLATFORMS.forEach(function (p) {
-      if (!CJ.itemAllowsPlatform(item, p.id)) return;
+      if (!CJ.itemPostsOn(item, p.id)) return;
       allowed++;
       var f = nextFreeOn(item, p.id);
       if (!f) { best = 'now'; return; }
@@ -188,13 +212,25 @@
     return best;
   }
 
+  /** Readiness pills: on hold, season window, solo, photos only. */
+  function readinessPills(item) {
+    var out = [];
+    var h = CJ.holdInfo(item);
+    if (h.held) out.push(el('span', { class: 'pill pill-warn', text: '⏸ On hold', title: 'Not in the calendar: ' + h.reason }));
+    var se = CJ.seasonInfo(item);
+    if (!se.any) out.push(el('span', { class: 'pill pill-amber', text: se.label.replace(/ only$/, ''), title: 'Only posts in this window' + (se.because ? ' (from ' + se.because + ')' : '') }));
+    if (item.solo) out.push(el('span', { class: 'pill pill-good', text: '★ Solo', title: 'Enough for its own post' }));
+    if (item.photosOnly) out.push(el('span', { class: 'pill pill-quiet', text: '📷 Photos', title: 'Photos only: carousels, no TikTok' }));
+    return out;
+  }
+
   function statusCell(item) {
     var reuse = CJ.reuseInfo(CJ.reuseState(item));
     var dl = deadlineOf(item);
     var bits = [el('span', {
       class: 'pill ' + (reuse.id === 'recent' ? 'pill-quiet' : 'pill-good'),
       text: reuse.emoji + ' ' + reuse.label, title: reuse.hint
-    })];
+    })].concat(readinessPills(item));
 
     if (dl) {
       var left = CJ.daysBetween(new Date(), CJ.parseDate(dl.deadline));
@@ -242,6 +278,10 @@
       if (filters.tagMode === 'all') { if (hits.length !== filters.tags.length) return false; }
       else if (hits.length === 0) return false;
     }
+
+    if (filters.freeNow && !isFreeNow(item)) return false;
+    if (filters.flag && !hasFlag(item, filters.flag)) return false;
+    if (filters.noHood && item.neighborhood) return false;
 
     if (filters.q) {
       var q = filters.q.toLowerCase();
@@ -327,6 +367,10 @@
       if (a.key === '~none') return 1;
       if (b.key === '~none') return -1;
       if (filters.group === 'reuse') return reuseOrder.indexOf(a.key) - reuseOrder.indexOf(b.key);
+      if (filters.group === 'type') {
+        var ids = CJ.TYPES.map(function (t) { return t.id; });
+        return ids.indexOf(a.key) - ids.indexOf(b.key);
+      }
       if (filters.group === 'tag' || filters.group === 'neighborhood') return b.items.length - a.items.length;
       return 0;
     });
@@ -657,6 +701,9 @@
     filters.tags.forEach(function (t) {
       bits.push({ label: t, off: function () { toggle(filters.tags, t); } });
     });
+    if (filters.freeNow) bits.push({ label: '🟢 Free to post now', off: function () { filters.freeNow = false; } });
+    if (filters.noHood) bits.push({ label: '📍 No neighborhood', off: function () { filters.noHood = false; } });
+    if (filters.flag) bits.push({ label: FLAG_LABELS[filters.flag], off: function () { filters.flag = null; } });
     if (filters.q) bits.push({ label: '“' + filters.q + '”', off: function () { filters.q = ''; $('#search').value = ''; } });
 
     var on = bits.length > 0;
@@ -720,15 +767,164 @@
 
   function clearFilters() {
     filters.q = ''; filters.types = []; filters.reuse = []; filters.tags = [];
+    filters.freeNow = false; filters.noHood = false; filters.flag = null;
     tagQuery = '';
     $('#search').value = '';
     if ($('#tag-search')) $('#tag-search').value = '';
     render();
   }
 
+  /* ---------- the shelf ----------
+     Every way into the library, with live counts, in one column. Clicking a
+     shelf replaces the current filters with just that one (like opening a
+     folder); the search box and sort are left alone. Multi-filtering still
+     lives in the bar's popovers. */
+
+  var shelfMore = { hoods: false, subjects: false };
+  var shelfOpen = false;   // phones: the shelf folds into a toggle
+
+  function resetFacets() {
+    filters.types = []; filters.reuse = []; filters.tags = [];
+    filters.freeNow = false; filters.noHood = false; filters.flag = null;
+  }
+
+  function facetCount() {
+    return filters.types.length + filters.reuse.length + filters.tags.length +
+      (filters.freeNow ? 1 : 0) + (filters.noHood ? 1 : 0) + (filters.flag ? 1 : 0);
+  }
+
+  /** Tags on 2+ places that aren't neighborhoods. Item tags only, which is
+      exactly what the tag filter matches, so the count is the result size. */
+  function shelfSubjects(items) {
+    var counts = {};
+    items.forEach(function (it) {
+      var seen = {};
+      (it.tags || []).forEach(function (t) {
+        var k = t.toLowerCase();
+        if (seen[k] || CJ.tagCategory(t) === 'neighborhood') return;
+        if (it.neighborhood && it.neighborhood.toLowerCase() === k) return;
+        seen[k] = true;
+        counts[k] = counts[k] || { tag: t, n: 0 };
+        counts[k].n++;
+      });
+    });
+    return Object.keys(counts).map(function (k) { return counts[k]; })
+      .filter(function (c) { return c.n >= 2; })
+      .sort(function (a, b) { return b.n - a.n || a.tag.localeCompare(b.tag); });
+  }
+
+  function renderShelf() {
+    var box = $('#lib-shelf');
+    if (!box) return;
+    box.innerHTML = '';
+    var items = CJ.getItems();
+    if (!items.length) { box.hidden = true; return; }
+    box.hidden = false;
+    box.classList.toggle('is-open', shelfOpen);
+
+    function only(onlyOne) {
+      var n = facetCount();
+      return n === 1 && onlyOne();
+    }
+
+    function entry(label, n, isOn, apply, extraCls) {
+      return el('button', {
+        type: 'button', class: 'shelf-item' + (isOn ? ' is-on' : '') + (n ? '' : ' is-empty') + (extraCls ? ' ' + extraCls : ''),
+        'aria-pressed': isOn ? 'true' : 'false',
+        onclick: function () { resetFacets(); apply(); shelfOpen = false; render(); }
+      }, [
+        el('span', { class: 'shelf-label', text: label }),
+        el('span', { class: 'shelf-n', text: String(n) })
+      ]);
+    }
+
+    function section(title, kids, more) {
+      return el('div', { class: 'shelf-sec' }, [el('h4', { text: title })].concat(kids).concat(more ? [more] : []));
+    }
+
+    var reuseN = function (id) {
+      return items.filter(function (i) { return id === 'due' ? !!i.deadline : CJ.reuseState(i) === id; }).length;
+    };
+    var reuseOn = function (id) { return only(function () { return filters.reuse[0] === id; }); };
+
+    var smart = [
+      entry('All places', items.length, facetCount() === 0, function () {}),
+      entry('✨ Never posted', reuseN('unused'), reuseOn('unused'), function () { filters.reuse.push('unused'); }),
+      entry('🟢 Free to post now', items.filter(isFreeNow).length, only(function () { return filters.freeNow; }), function () { filters.freeNow = true; }),
+      entry('♻️ Ready to reuse', reuseN('ready'), reuseOn('ready'), function () { filters.reuse.push('ready'); }),
+      entry('🕐 Resting', reuseN('recent'), reuseOn('recent'), function () { filters.reuse.push('recent'); }),
+      entry('⏰ Has a deadline', reuseN('due'), reuseOn('due'), function () { filters.reuse.push('due'); })
+    ];
+
+    var flagEntry = function (f, label) {
+      return entry(label, items.filter(function (i) { return hasFlag(i, f); }).length,
+        only(function () { return filters.flag === f; }), function () { filters.flag = f; });
+    };
+    var readiness = [
+      flagEntry('solo', '★ Enough for its own post'),
+      flagEntry('photos', '📷 Photos only'),
+      flagEntry('seasonal', '🗓 Seasonal'),
+      flagEntry('held', '⏸ On hold')
+    ];
+
+    var types = CJ.TYPES.map(function (t) {
+      return entry(t.emoji + ' ' + t.plural, items.filter(function (i) { return i.type === t.id; }).length,
+        only(function () { return filters.types[0] === t.id; }),
+        function () { filters.types.push(t.id); });
+    });
+
+    var hoodCounts = {};
+    items.forEach(function (i) { if (i.neighborhood) hoodCounts[i.neighborhood] = (hoodCounts[i.neighborhood] || 0) + 1; });
+    var hoods = Object.keys(hoodCounts).sort(function (a, b) { return hoodCounts[b] - hoodCounts[a] || a.localeCompare(b); });
+    var noHood = items.filter(function (i) { return !i.neighborhood; }).length;
+    var hoodLimit = shelfMore.hoods ? hoods.length : 8;
+    var hoodEntries = hoods.slice(0, hoodLimit).map(function (h) {
+      return entry(h, hoodCounts[h], only(function () { return filters.tags[0] === h; }), function () { filters.tags.push(h); });
+    });
+    if (noHood) hoodEntries.push(entry('No neighborhood', noHood, only(function () { return filters.noHood; }), function () { filters.noHood = true; }, 'is-quiet'));
+
+    var subs = shelfSubjects(items);
+    var subLimit = shelfMore.subjects ? subs.length : 10;
+    var subEntries = subs.slice(0, subLimit).map(function (x) {
+      return entry(x.tag, x.n, only(function () { return filters.tags[0] === x.tag; }), function () { filters.tags.push(x.tag); });
+    });
+
+    function moreBtn(key, total, limit) {
+      if (total <= limit && !shelfMore[key]) return null;
+      return el('button', {
+        type: 'button', class: 'shelf-more',
+        text: shelfMore[key] ? 'Show fewer' : 'Show all ' + total,
+        onclick: function () { shelfMore[key] = !shelfMore[key]; renderShelf(); }
+      });
+    }
+
+    var active = facetCount();
+    box.appendChild(el('button', {
+      type: 'button', class: 'shelf-toggle',
+      onclick: function () { shelfOpen = !shelfOpen; renderShelf(); }
+    }, [
+      el('span', { text: '☰ Shelves' }),
+      el('span', { class: 'shelf-toggle-state', text: active ? active + ' filter' + (active === 1 ? '' : 's') + ' on' : 'All places' })
+    ]));
+
+    box.appendChild(el('div', { class: 'shelf-body' }, [
+      section('Smart lists', smart),
+      section('Readiness', readiness),
+      section('Type', types),
+      hoods.length || noHood ? section('Location', hoodEntries, moreBtn('hoods', hoods.length, 8)) : null,
+      subs.length ? section('Subject', subEntries, moreBtn('subjects', subs.length, 10)) : null,
+      el('button', {
+        type: 'button', class: 'shelf-coll',
+        text: 'Open Collections view →',
+        onclick: function () { CJ.collectionsUI.setMode('collections'); }
+      })
+    ].filter(Boolean)));
+  }
+
   function render() {
     if (!CJ.state) return;
     renderFilterChips();
+    renderShelf();
 
     $$('#lib-view button').forEach(function (b) {
       b.classList.toggle('is-active', b.getAttribute('data-mode') === viewMode());
@@ -772,15 +968,34 @@
 
     groupItems(sortItems(shown)).forEach(function (g) {
       var block = el('div', { class: 'group-block' });
+      var shut = !!(g.label && collapsed[filters.group + '|' + g.key]);
       if (g.label) {
-        block.appendChild(el('div', { class: 'group-head' }, [
+        var unusedClips = g.items.reduce(function (a, it) { return a + CJ.unusedLayers(it).length; }, 0);
+        var free = g.items.filter(isFreeNow).length;
+        block.appendChild(el('button', {
+          class: 'group-head' + (shut ? ' is-shut' : ''), type: 'button',
+          'aria-expanded': shut ? 'false' : 'true',
+          title: shut ? 'Show this group' : 'Fold this group away',
+          onclick: function () {
+            var k = filters.group + '|' + g.key;
+            collapsed[k] = !collapsed[k];
+            render();
+          }
+        }, [
+          el('span', { class: 'group-caret', text: '▾', 'aria-hidden': 'true' }),
           el('h3', { text: g.label }),
-          el('span', { class: 'count', text: g.items.length + ' item' + (g.items.length === 1 ? '' : 's') })
+          el('span', { class: 'count', text: g.items.length + ' place' + (g.items.length === 1 ? '' : 's') }),
+          el('span', { class: 'group-meta' }, [
+            unusedClips ? el('span', { class: 'pill pill-good', text: '✨ ' + unusedClips + ' never posted' }) : null,
+            el('span', { class: 'pill pill-quiet', text: free + ' free now' })
+          ])
         ]));
       }
-      block.appendChild(viewMode() === 'cards'
-        ? el('div', { class: 'card-grid' }, g.items.map(itemCard))
-        : el('div', { class: 'row-list' }, g.items.map(itemRow)));
+      if (!shut) {
+        block.appendChild(viewMode() === 'cards'
+          ? el('div', { class: 'card-grid' }, g.items.map(itemCard))
+          : el('div', { class: 'row-list' }, g.items.map(itemRow)));
+      }
       body.appendChild(block);
     });
   }
@@ -792,6 +1007,7 @@
   function renderFormTags() {
     var wrap = $('#f-tag-chips');
     wrap.innerHTML = '';
+    if ($('#f-season')) setTimeout(renderReadiness, 0);
     formTags.forEach(function (t, i) {
       wrap.appendChild(el('span', {
         class: 'tag-chip', 'data-cat': CJ.tagCategory(t)
@@ -900,6 +1116,64 @@
     list.appendChild(layerStrip(item) || el('span'));
   }
 
+  /* ---------- readiness + season controls ----------
+     The hold box follows your notes until you touch it: type "not enough
+     footage" and it ticks itself, with the words it read shown underneath.
+     Tick or untick it yourself and that choice sticks, whatever the notes
+     say. Saved as null (follow the notes) / true / false. */
+  var formHoldTouched = false;
+  var formHoldValue = null;      // stored value when opened
+  var formSeasonMonths = [];
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  function draftItem() {
+    return {
+      name: $('#f-name').value, tags: formTags.slice(), notes: $('#f-notes').value,
+      seasonMode: $('#f-season').value, seasonMonths: formSeasonMonths.slice(),
+      layers: [], hold: null
+    };
+  }
+
+  function renderReadiness() {
+    var d = draftItem();
+    var fromNotes = CJ.holdMatch(d.notes);
+    var box = $('#f-hold');
+    if (!formHoldTouched) box.checked = formHoldValue === true || (formHoldValue === null && !!fromNotes);
+    var hint = $('#f-hold-hint');
+    if (fromNotes && box.checked && !formHoldTouched && formHoldValue === null) {
+      hint.textContent = 'Ticked because your notes say “' + fromNotes + '”. Untick to use it anyway.';
+    } else if (fromNotes && !box.checked) {
+      hint.textContent = 'Your notes say “' + fromNotes + '”, but you\'ve chosen to use it anyway.';
+    } else {
+      hint.textContent = 'Left out of the calendar until you add more footage.';
+    }
+
+    var mode = $('#f-season').value;
+    var mBox = $('#f-season-months');
+    mBox.hidden = mode !== 'months';
+    mBox.innerHTML = '';
+    if (mode === 'months') {
+      MONTHS.forEach(function (label, i) {
+        var m = i + 1, on = formSeasonMonths.indexOf(m) !== -1;
+        mBox.appendChild(el('button', {
+          type: 'button', class: 'chip chip-sm' + (on ? ' is-on' : ''), text: label,
+          onclick: function () {
+            var at = formSeasonMonths.indexOf(m);
+            if (at === -1) formSeasonMonths.push(m); else formSeasonMonths.splice(at, 1);
+            renderReadiness();
+          }
+        }));
+      });
+    }
+    var info = CJ.seasonInfo(d);
+    $('#f-season-hint').textContent =
+      mode === 'auto'
+        ? (info.any ? 'Year-round. Tag it “halloween”, “fall”, “christmas”… and it will only post then.'
+                    : info.label + ', from ' + info.because + '.')
+        : mode === 'any' ? 'Can post any month.'
+        : (formSeasonMonths.length ? info.label + '.' : 'Pick the months it can post in.');
+  }
+
   function openForm(id) {
     var item = id ? CJ.getItem(id) : null;
     $('#modal-title').textContent = item ? 'Edit content' : 'Add content';
@@ -912,12 +1186,20 @@
     $('#btn-delete').hidden = !item;
     formFit = item ? Object.assign({}, item.platformFit) : { tiktok: 'auto', instagram: 'auto', pinterest: 'auto' };
     renderFormFit();
+    $('#f-solo').checked = !!(item && item.solo);
+    $('#f-photos').checked = !!(item && item.photosOnly);
+    formHoldTouched = false;
+    formHoldValue = item ? item.hold : null;
+    $('#f-season').value = item ? (item.seasonMode || 'auto') : 'auto';
+    formSeasonMonths = item ? (item.seasonMonths || []).slice() : [];
     renderFormLayers(item);
 
     formTags = item ? (item.tags || []).slice() : [];
     renderFormTags();
     renderTagSuggestions('');
     $('#f-tag-entry').value = '';
+    renderReadiness();
+    CJ.websiteUI.formOpen(item);
 
     // Neighborhood autocomplete from what you've used plus the Atlanta list.
     var dl = $('#neighborhood-list');
@@ -931,10 +1213,25 @@
     });
 
     $('#modal').hidden = false;
-    setTimeout(function () { $('#f-name').focus(); }, 40);
+    // Put the cursor in Name — unless you've already clicked into another
+    // field. Grabbing focus unconditionally sent fast typing into the wrong box
+    // (and Enter there saved the form).
+    setTimeout(function () {
+      var a = document.activeElement;
+      var busyElsewhere = a && a !== document.body && $('#modal').contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+      if (!busyElsewhere) $('#f-name').focus();
+    }, 40);
   }
 
   function closeForm() { $('#modal').hidden = true; }
+
+  /** null while the box still just mirrors the notes; explicit otherwise. */
+  function holdToSave() {
+    var checked = $('#f-hold').checked;
+    if (!formHoldTouched) return formHoldValue;
+    var fromNotes = !!CJ.holdMatch($('#f-notes').value);
+    return checked === fromNotes ? null : checked;
+  }
 
   function saveForm(e) {
     e.preventDefault();
@@ -953,6 +1250,12 @@
       neighborhood: $('#f-neighborhood').value.trim(),
       tags: formTags.slice(),
       platformFit: Object.assign({}, formFit),
+      solo: $('#f-solo').checked,
+      photosOnly: $('#f-photos').checked,
+      hold: holdToSave(),
+      seasonMode: $('#f-season').value,
+      seasonMonths: $('#f-season').value === 'months' ? formSeasonMonths.slice() : [],
+      web: CJ.websiteUI.formValue(),
       notes: $('#f-notes').value.trim(),
       link: $('#f-link').value.trim()
     });
@@ -981,6 +1284,10 @@
 
   function init() {
     $('#btn-add').addEventListener('click', function () { openForm(); });
+    $('#f-notes').addEventListener('input', renderReadiness);
+    $('#f-name').addEventListener('input', renderReadiness);
+    $('#f-season').addEventListener('change', renderReadiness);
+    $('#f-hold').addEventListener('change', function () { formHoldTouched = true; renderReadiness(); });
     $('#modal-close').addEventListener('click', closeForm);
     $('#btn-cancel').addEventListener('click', closeForm);
     $('#btn-delete').addEventListener('click', deleteCurrent);
@@ -1027,7 +1334,14 @@
 
     $('#search').addEventListener('input', function () { filters.q = this.value.trim(); render(); });
     $('#sort-by').addEventListener('change', function () { filters.sort = this.value; render(); });
-    $('#group-by').addEventListener('change', function () { filters.group = this.value; render(); });
+    // Grouping is a preference, like rows vs cards, so it syncs.
+    $('#group-by').addEventListener('change', function () {
+      filters.group = this.value;
+      CJ.updateSettings({ libraryGroup: this.value });
+      render();
+    });
+    filters.group = CJ.settings().libraryGroup || 'type';
+    $('#group-by').value = filters.group;
     $('#btn-clear-filters').addEventListener('click', clearFilters);
 
     $$('#tag-match button').forEach(function (b) {
@@ -1072,6 +1386,10 @@
     clearFilters: clearFilters,
     nextFreeOn: nextFreeOn,
     nextFreeAny: nextFreeAny,
+    isFreeNow: isFreeNow,
+    hasFlag: hasFlag,
+    formTags: function () { return formTags.slice(); },
+    addFormTag: function (t) { addFormTag(t); },
     filters: filters
   };
 

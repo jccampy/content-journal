@@ -210,6 +210,10 @@
         row.lastPosted = lastPosted;
       }
       delete row.ago;
+      // Demo the readiness flags: restaurants and at-home pieces carry a post
+      // of their own, every third place is photos only.
+      if (row.solo == null) row.solo = row.type !== 'experience';
+      if (row.photosOnly == null) row.photosOnly = i % 3 === 2;
       var saved = CJ.upsertItem(row);
 
       // Give a few places a second, unused clip so the layer behaviour is
@@ -350,6 +354,17 @@
   function renderPrefs() {
     var s = CJ.settings();
     $('#pref-per-month').value = s.ideasPerMonth;
+    // With a weekly cadence set, "ideas per month" doesn't drive anything, so
+    // show the cadence instead of a setting that would silently do nothing.
+    var cad = CJ.cadenceOn();
+    $('#pref-per-month-wrap').hidden = cad;
+    $('#pref-cadence').hidden = !cad;
+    if (cad) {
+      $('#pref-cadence-text').textContent = 'Posting cadence: ' + CJ.PLATFORM_IDS.map(function (p) {
+        var n = (s.postsPerWeek || {})[p] || 0;
+        return CJ.ui.platformInfo(p).label + ' ' + (n ? n + '/week' : 'paused');
+      }).join(' · ');
+    }
     $('#pref-cooldown').value = s.repostCooldownDays;
     $('#pref-weather').checked = !!s.showWeather;
 
@@ -376,7 +391,7 @@
   function renderAI() {
     var ai = CJ.settings().ai || {};
     $('#ai-key').value = ai.key || '';
-    $('#ai-model').value = ai.model || 'claude-sonnet-5';
+    $('#ai-model').value = ai.model || CJ.ai.DEFAULT_MODEL;
     $('#ai-voice').value = ai.voice || '';
   }
 
@@ -428,6 +443,7 @@
       CJ.updateSettings({ carouselMinItems: v });
       CJ.calendarUI.markStale();
     });
+    $('#pref-cadence-edit').addEventListener('click', function () { CJ.planUI.open(); });
     $('#pref-per-month').addEventListener('change', function () {
       var v = Math.max(2, Math.min(20, Number(this.value) || 8));
       this.value = v;

@@ -17,6 +17,27 @@ library lives in a real database instead of a browser — see **SUPABASE-SETUP.m
 
 ## What it does
 
+**Five Instagram posts a week** — The calendar books real weekly slots: 5 Instagram posts on
+your posting days, TikTok and Pinterest paused until you switch them on in **Build a plan**.
+It never goes over, and when your library can't honestly fill every slot it leaves the gap
+and tells you what it *can* carry (and what would help) rather than stretching thin content.
+
+**Only content that's ready** — Each place has three boxes: **Enough for its own post**
+(only these get single-place features), **Photos only** (always a carousel, never TikTok)
+and **On hold**. Write "not enough footage" or "need to reshoot" in the notes and it puts
+itself on hold, showing you the words it read; untick to use it anyway.
+
+**Seasonal content in season** — Tag a place "halloween" and it only posts in the three
+weeks before Halloween; "fall", "christmas", "valentine's", "summer" and the rest work the
+same way, per place or per clip ("Fire pit night, winter"). Or pick the months yourself.
+
+**Read their website** — Paste the restaurant's website on the place, hit **✨ Read
+website**, and Claude reads it for tags (cuisine, patio, brunch, happy hour…), a summary,
+the practical details and 4–6 post ideas based on what's really there. Tap what you want to
+keep; **Add to calendar** books an idea on the next open day. Needs your Claude key in
+Settings → AI (a website can't be read from the page itself); everything else works
+without one.
+
 **Overview** — The first screen. What's going up this week (and anything that slipped),
 what you've posted lately, how many clips have never been used, the next six posts, the
 platform mix for the next 30 days, the places most ready to use right now, the collections
@@ -29,6 +50,11 @@ patio, cozy, hosting…) and **type**. Each one shows how many places and clips 
 many clips were never posted, how many places are free to use today, and what's already
 coming up. **Browse** filters the library to it; **Plan this** builds a plan from it.
 Nothing to maintain: tag a place and it joins its collections on its own.
+
+**Library shelves** — A sidebar beside your places with everything one click away: smart
+lists (never posted, free to post now, ready to reuse, resting, has a deadline), then type,
+location and subject, each with a live count. The list itself is grouped by type, and any
+group folds shut with a click on its heading.
 
 **Place journal** — The 📖 on any place. Its whole story in order: which platforms it's
 free on, every post coming up, then every shoot and every post, newest first, including

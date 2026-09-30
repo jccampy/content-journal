@@ -69,6 +69,7 @@
     CJ.settingsUI.init();
     CJ.syncUI.init();
     CJ.journalUI.init();
+    CJ.websiteUI.init();
     CJ.collectionsUI.init();
     CJ.planUI.init();
     CJ.homeUI.init();

@@ -51,7 +51,11 @@
     'why': 'deadlineNote', 'deadline note': 'deadlineNote', 'reason': 'deadlineNote',
     'priority': 'priority',
     'platforms': 'platforms', 'platform': 'platforms', 'only on': 'platforms',
-    'post on': 'platforms', 'channels': 'platforms', 'fit': 'platforms'
+    'post on': 'platforms', 'channels': 'platforms', 'fit': 'platforms',
+    'solo': 'solo', 'own post': 'solo', 'its own post': 'solo', 'enough for its own post': 'solo',
+    'solo post': 'solo', 'individual post': 'solo',
+    'photos only': 'photosOnly', 'photo only': 'photosOnly', 'photos': 'photosOnly', 'pictures only': 'photosOnly',
+    'hold': 'hold', 'on hold': 'hold'
   };
 
   var KEY_LIST = Object.keys(KEY_ALIASES).sort(function (a, b) { return b.length - a.length; });
@@ -288,6 +292,15 @@
     if (rec.priority) {
       rec.priority = /high|urgent|asap|top/i.test(rec.priority) ? 'high' : 'normal';
     }
+    // Yes/no flags. Anything that isn't clearly yes or no is left unset and
+    // called out, the same as a date it couldn't read.
+    ['solo', 'photosOnly', 'hold'].forEach(function (f) {
+      if (rec[f] == null || typeof rec[f] === 'boolean') return;
+      var v = clean(rec[f]).toLowerCase();
+      if (/^(y|yes|true|x|✓|✔|1|yep|yeah)$/.test(v)) rec[f] = true;
+      else if (/^(n|no|false|0|nope)$/.test(v)) rec[f] = false;
+      else { rec.warnings.push('Couldn\'t tell if "' + clean(rec[f]) + '" means yes or no — left unset.'); delete rec[f]; }
+    });
     return rec;
   }
 
@@ -508,6 +521,10 @@
           if (!item.neighborhood && rec.neighborhood) patch.neighborhood = rec.neighborhood;
           if (!item.link && rec.link) patch.link = rec.link;
           if (!clean(item.notes) && rec.notes) patch.notes = rec.notes;
+          // Flags only switch ON in a merge; a paste never unticks something.
+          if (rec.solo === true && !item.solo) patch.solo = true;
+          if (rec.photosOnly === true && !item.photosOnly) patch.photosOnly = true;
+          if (rec.hold === true && item.hold !== true) patch.hold = true;
 
           CJ.upsertItem(patch);
 
@@ -545,6 +562,9 @@
           }]
         };
         if (rec.platformFit) data.platformFit = rec.platformFit;
+        if (rec.solo != null) data.solo = rec.solo;
+        if (rec.photosOnly != null) data.photosOnly = rec.photosOnly;
+        if (rec.hold != null) data.hold = rec.hold;
 
         var made = CJ.upsertItem(data);
         if (made) { res.added++; res.newIds.push(made.id); }

@@ -60,6 +60,7 @@ src/ui-calendar.js calendar view, reschedule, idea detail + the brief tabs
 src/ui-monthly.js  the Monthly plan board
 src/ui-events.js   custom events + built-in event toggles
 src/ui-journal.js  one place's journal: clips + posts timeline (derived)
+src/ui-website.js  "Read website": suggestions from a place's own site
 src/ui-collections.js  library browsed by location / subject / type
 src/ui-plan.js     the Plan builder (horizon, pace, days, scope)
 src/ui-home.js     Overview — the landing screen
@@ -366,8 +367,15 @@ September to spring, because the festival fell outside the 6-month horizon. Keep
 `browser-test.js` has an intermittent timeout at the first tag entry (line ~65) that
 predates v2; it passes on a rerun. Worth chasing if it gets worse.
 
+`test/cadence-test.js` covers v2.2: Instagram-only default, ≤5 a week on posting days,
+seasonal windows (place and clip), note holds and overrides, solo and photos-only, the
+capacity line, exact event areas, Quick add flags, the form's hold box, and Read website
+against a mocked API. **Run it after any change to generator.js, the readiness/season/
+cadence helpers in state.js, ui-plan.js, ui-website.js or ai.js.**
+
 ```bash
 npm install playwright
+node test/cadence-test.js
 node test/upgrade-test.js
 node test/browser-test.js
 node test/sync-test.js
@@ -580,6 +588,13 @@ deletes places the import created — anything merged into a place that already 
 | Approximate event dates marked `~` | Festival dates shift yearly. Better to flag than to state a wrong date confidently. |
 | Plan focus is a scope, not a bias | Measured: a bias created no extra focused posts and cost 4-6 posts a quarter. |
 | Overview is the landing screen | It covers both states: onboarding when empty, what's next once there's a calendar. |
+| Library shelf replaces, popovers combine | One click should open one folder; combining filters is the rarer, deliberate act. |
+| Asset links carry `?v=` and it's bumped each release | A stale cached stylesheet next to a new page breaks the layout. |
+| Instagram-only, 5 a week, TikTok/Pinterest paused | Julia, Sep 29 2026. Turn them on in Build a plan. |
+| Leave slots empty rather than stretch | "It's okay to not use everything." A thin post is worse than none. |
+| Notes can put a place on hold | She writes "not enough for a full post" in notes; it should act on that, visibly and overridably. |
+| Season comes from name + tags, not notes | Notes mention holidays in passing; tags are deliberate. |
+| Website reading suggests, never edits | Same rule as Quick add: nothing written without her say. |
 | Collections are derived, never stored | A newly tagged place has to join its collections without anyone maintaining them. |
 
 ---
@@ -682,7 +697,96 @@ still works there.
 labels. The header drops its `backdrop-filter` on phones because a backdrop-filter makes
 the header the containing block for fixed children, which pinned the bar inside it.
 
+**Library shelf (v2.1, `renderShelf` in ui-library.js)** — a sidebar next to the list:
+Smart lists (All, Never posted, Free to post now, Ready to reuse, Resting, Has a
+deadline), Type, Location (+ No neighborhood) and Subject, each with live counts.
+Clicking a shelf *replaces* the facet filters with that one, like opening a folder;
+search and sort are left alone, and multi-filtering still lives in the popovers. Two
+filters were added for it, `filters.freeNow` (`isFreeNow`: on a lane and not held by
+spacing) and `filters.noHood`. Shelf subjects count item tags only, which is exactly what
+the tag filter matches, so a shelf's number is always its result size. At ≤900px it
+folds into one "Shelves" toggle.
+
+**Groups** default to type (`settings.libraryGroup`, synced like `libraryView`), and each
+group header is a button that folds the group. Fold state is per-session, not stored.
+
+**Versioned asset links.** Every `<link>`/`<script>` in index.html carries `?v=2.1`.
+Without it, a browser can pair a fresh index.html with a cached old styles.css
+(GitHub Pages lets browsers cache ~10 minutes), which is exactly how v2's nav icons once
+rendered giant and black. **Bump the version on every release.** The tab SVGs also carry
+inline width/height/stroke so they stay small outlines even with no CSS at all.
+
 The palette and light-only rule are unchanged. v2 adds no colours.
+
+## v2.2: weekly cadence, readiness, seasons, websites
+
+Asked for September 29, 2026: "use the content I have… if I only have halloween content,
+only post that place around halloween… if I comment that I don't have enough for a full
+post, don't use it… 5 posts on Instagram a week; TikTok later." Plus two boxes on every
+place: enough for its own post, photos only. Plus: read the restaurant's website for more
+tags and post ideas.
+
+**Cadence (`settings.postsPerWeek`, default `{instagram: 5, tiktok: 0, pinterest: 0}`).**
+A platform at 0 is paused (`CJ.platformActive`). `CJ.itemPostsOn(item, p)` = active AND
+right lane AND (not TikTok if photos only); the generator uses it everywhere instead of
+`itemAllowsPlatform`. Each platform has weekly slot days (`CJ.slotDays`: your preferred
+days first, topped up in the order Thu, Tue, Sat, Wed, Fri, Mon, Sun). The date picker only
+hands out free slots per platform, returns null when there's none, and `{force:true}` lets
+deadlines through anyway. Kept drops reserve their slots. `postsPerWeek: null` restores the
+old concepts-per-month engine; **browser-test and library-test run in that mode on
+purpose** so the multi-platform rollout stays covered.
+
+Month fill in cadence mode: spotlights (single-place features) up to 75% of free slots,
+then themes, then spotlights again. Occasions are capped at ~half the weekly number per
+month and at 4 places. Roundups subtract 35 from `itemScore` for solo places, so they lean
+on places that can't carry a post alone. Measured first the other way round: roundups
+first left ONE spotlight in six months.
+
+**Even pacing.** `weekCap` = min(asked, ceil(capacity)). When the library can't carry 5 a
+week, posts spread evenly instead of five this week and silence for a month.
+`capacity(platform)` in generator.js is the honest ceiling: each place can post once per
+gap; solo places fill a slot alone, others count ~1/3.5. The Plan builder prints it.
+
+**Readiness (state.js).** `item.hold` / `layer.hold`: null = follow the notes, true =
+on hold, false = use anyway. `holdMatch(text)` looks for phrases about the FOOTAGE
+("not enough footage/clips/for a post", "need more b-roll", "only have 2 clips",
+"reshoot", "don't post yet", "hold for now") and deliberately ignores lookalikes ("not
+enough seating", "need reservations", "only open 2 days"). The matched words are shown
+back, with an untick-to-override. A place is held if its own flag/notes say so or every
+clip is held. Held places sit out of plans entirely; **deadlines still get placed** with a
+warning in the blurb, because a commitment outranks it.
+
+`item.solo`: any generated post with exactly one place needs it (buildDrops enforces it;
+deadlines pass `allowSingle`). `item.photosOnly`: Instagram format is always carousel,
+never on TikTok.
+
+**Seasons.** `seasonInfo(item)` reads the name and tags (never the notes: "cute at
+Christmas" in a note shouldn't restrict a year-round spot); `layerSeasonInfo` reads a
+clip's label and tags. A specific holiday beats a broad season on the same thing. Holiday
+windows are the ~3 weeks before the day, ending on it (Halloween Oct 10–31); broad seasons
+keep their full run (fall Sep 15–Nov 30). `seasonMode` 'any' / 'months' override it.
+`usableOn(item, iso)` = not held, in the place's window, and has a clip that's live, not
+held and in its own window. `bestLayerFor(item, p, iso)` picks among those.
+
+**Event areas are exact now** (`sameArea`). The old substring test put West Midtown inside
+"Midtown"; the IG-only default surfaced it as a Midtown Pride guide full of West Midtown.
+
+**Websites (`ai.js` readWebsite, `ui-website.js`).** A static page can't fetch other sites
+(CORS), so Claude reads them server-side with the web fetch tool
+(`web_fetch_20260318`, `allowed_domains` = the place's own host). Needs the optional key;
+nothing else depends on it. Returns suggestions only, stored on `item.web`: summary, facts,
+suggested tags (tap to add), post ideas (Add to calendar → a planned, pinned `source:'ai'`
+idea on the next free slot that respects spacing and, for seasonal ideas, the last three
+weeks of their months). Website hooks lead the spotlight hooks for that place; the summary
+is in `searchBag`. Settings has "Read every website". Default model is now
+`claude-sonnet-5-5`; old saved ids (`claude-sonnet-5`, `claude-opus-5`) are migrated.
+Only tested against a mocked API from the build environment; if the API ever rejects the
+tool version, the error message is shown as-is in a toast.
+
+**Form focus race (fixed).** openForm focused Name 40ms after opening, unconditionally, so
+fast typing into another field landed in Name and Enter saved the form. It now only
+focuses Name if nothing else in the form has focus. This was the "intermittent" browser-test
+failure at the first tag entry.
 
 ## Current state
 

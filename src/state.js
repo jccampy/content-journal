@@ -20,6 +20,12 @@ window.CJ = window.CJ || {};
     // The cooldown above is a soft preference; this one is a rule.
     minGapDays: { restaurant: 30, experience: 30, home: 30 },
     preferredDays: [2, 4, 6], // Tue, Thu, Sat
+
+    /* Posting cadence, per platform per week. A platform at 0 is paused: the
+       calendar makes nothing for it. Each post takes one real slot on one of
+       your posting days, so a week never holds more than this. Set to null to
+       fall back to the older concepts-per-month mode (ideasPerMonth). */
+    postsPerWeek: { instagram: 5, tiktok: 0, pinterest: 0 },
     showWeather: true,
     horizonMonths: 6,
     // Julia's lanes: food/restaurants + home/lifestyle on Instagram,
@@ -48,10 +54,14 @@ window.CJ = window.CJ || {};
     /* 'rows' (compact) or 'cards'. A preference, so it syncs across devices. */
     libraryView: 'rows',
 
+    /* How the library list is grouped. Type by default, so the list reads as
+       Restaurants / Experiences / At home rather than one long run. */
+    libraryGroup: 'type',
+
     /* Monthly topics you've dismissed from the planning list. */
     hiddenTopics: [],
 
-    ai: { key: '', model: 'claude-sonnet-5', voice: '' },
+    ai: { key: '', model: 'claude-sonnet-5-5', voice: '' },
 
     /* Optional plan focus set by the Plan builder: a collection the plan is
        built from, e.g. { kind: 'neighborhood', value: 'Midtown' }. Occasions
@@ -106,9 +116,14 @@ window.CJ = window.CJ || {};
     var merged = Object.assign({}, base, s);
     merged.settings = Object.assign({}, base.settings, s.settings || {});
     merged.settings.ai = Object.assign({}, base.settings.ai, (s.settings && s.settings.ai) || {});
+    // Older builds shipped model ids that aren't valid; move them to current ones.
+    var OLD_MODELS = { 'claude-sonnet-5': 'claude-sonnet-5-5', 'claude-opus-5': 'claude-opus-5-5' };
+    if (OLD_MODELS[merged.settings.ai.model]) merged.settings.ai.model = OLD_MODELS[merged.settings.ai.model];
     merged.settings.platformRules = Object.assign({}, base.settings.platformRules, (s.settings && s.settings.platformRules) || {});
     merged.settings.minGapDays = Object.assign({}, base.settings.minGapDays, (s.settings && s.settings.minGapDays) || {});
     merged.settings.rollout = Object.assign({}, base.settings.rollout, (s.settings && s.settings.rollout) || {});
+    if (s.settings && s.settings.postsPerWeek === null) merged.settings.postsPerWeek = null;
+    else merged.settings.postsPerWeek = Object.assign({}, base.settings.postsPerWeek, (s.settings && s.settings.postsPerWeek) || {});
     merged.settings.rollout.leadBy = Object.assign({}, base.settings.rollout.leadBy,
       (s.settings && s.settings.rollout && s.settings.rollout.leadBy) || {});
     merged.items = Array.isArray(s.items) ? s.items.map(normalizeItem) : [];
@@ -203,8 +218,21 @@ window.CJ = window.CJ || {};
       lastPosted: l.lastPosted || null,
       platformUse: normalizePlatformUse(l.platformUse, l.platforms || inherited.platforms, l.lastPosted, count),
       retired: !!l.retired,
+      // null = decide from the notes; true = on hold; false = use it anyway.
+      hold: l.hold === true ? true : l.hold === false ? false : null,
       createdAt: l.createdAt || now,
       updatedAt: l.updatedAt || l.createdAt || now
+    };
+  }
+
+  function normalizeWeb(w) {
+    if (!w || typeof w !== 'object') return null;
+    return {
+      url: w.url || '', readAt: w.readAt || null, summary: w.summary || '',
+      neighborhood: w.neighborhood || null,
+      facts: Object.assign({ hours: '', reservations: '', price: '', happyHour: '', parking: '' }, w.facts || {}),
+      suggestedTags: Array.isArray(w.suggestedTags) ? w.suggestedTags : [],
+      ideas: Array.isArray(w.ideas) ? w.ideas : []
     };
   }
 
@@ -247,6 +275,22 @@ window.CJ = window.CJ || {};
       // an Instagram post and a Pinterest pin about the same place don't
       // compete with each other.
       platformUse: normalizePlatformUse(it.platformUse, it.platforms, it.lastPosted, it.postCount),
+      // Readiness: null = decide from the notes; true = on hold (not enough
+      // for a post yet); false = use it anyway, whatever the notes say.
+      hold: it.hold === true ? true : it.hold === false ? false : null,
+      // Enough footage to carry a single-place post on its own.
+      solo: !!it.solo,
+      // What Claude read on the place's own website: summary, facts, tags you
+      // haven't taken yet, and post ideas. Suggestions only; see ui-website.js.
+      web: normalizeWeb(it.web),
+      // Photos only, no video: carousels on Instagram, never TikTok.
+      photosOnly: !!it.photosOnly,
+      // When it can post: 'auto' reads the tags and name (Halloween, fall…),
+      // 'any' means year-round, 'months' means only seasonMonths (1-12).
+      seasonMode: it.seasonMode === 'any' || it.seasonMode === 'months' ? it.seasonMode : 'auto',
+      seasonMonths: Array.isArray(it.seasonMonths)
+        ? it.seasonMonths.map(Number).filter(function (m) { return m >= 1 && m <= 12; })
+        : [],
       createdAt: it.createdAt || now,
       updatedAt: it.updatedAt || it.createdAt || now
     };
@@ -434,8 +478,11 @@ window.CJ = window.CJ || {};
   }
 
   /** The layer with the most life left: unused first, then longest unused. */
-  function bestLayerFor(item, platform) {
-    var live = (item.layers || []).filter(function (l) { return !l.retired; });
+  function bestLayerFor(item, platform, iso) {
+    // With a date, only clips that can actually post then: not on hold and in
+    // season. Without one (display), any live clip.
+    var live = iso ? usableLayersOn(item, iso) : [];
+    if (!live.length) live = (item.layers || []).filter(function (l) { return !l.retired; });
     if (!live.length) return null;
     var scored = live.map(function (l) {
       var s = 0;
@@ -1027,6 +1074,201 @@ window.CJ = window.CJ || {};
     catch (e) { return 0; }
   }
 
+  /* ---------- readiness: "not enough for a post yet" ----------
+     You write notes like "not enough footage, go back" or "need to reshoot".
+     Those mean: don't build a post out of this yet. The phrases below are the
+     ones that say that about the FOOTAGE (not "not enough seating"), and the
+     matched words are shown back to you, with a one-click "use anyway". */
+
+  var HOLD_RX = [
+    /\bnot enough\b[^.;!\n]{0,40}?\b(footage|clips?|content|videos?|shots?|photos?|pictures?|pics|b-?roll|material|angles?|to (make|do|fill|post)|for (a |the |one )?(full |whole |real )?(post|reel|video|carousel|feature))\b/i,
+    /\b(need|needs|want|have) to (get|shoot|film|capture|grab)\b[^.;!\n]{0,20}?\b(more|extra|another)\b/i,
+    /\b(need|needs) (a (few|couple)( more)?|more|extra|another)\b[^.;!\n]{0,25}?\b(footage|clips?|content|videos?|shots?|photos?|pics|b-?roll|angles?|visit)\b/i,
+    /\b(too few|only (have |got )?(one|two|1|2|a couple( of)?|a few))\b[^.;!\n]{0,20}?\b(clips?|shots?|photos?|pics|videos?|seconds?)\b/i,
+    /\b(re-?shoot|re-?film|go back (and|to) (film|shoot)|film more|shoot more|finish (filming|shooting))\b/i,
+    /\b(don'?t|do not|can'?t|cannot) (post|use) (this |it |yet)?\s*(yet|for now|until)\b/i,
+    /\bnot (a full post|enough yet|ready to (post|use))\b/i,
+    /\b(on hold|hold (for now|off on (it|this|posting)))\b/i
+  ];
+
+  function holdMatch(text) {
+    if (!text) return null;
+    for (var i = 0; i < HOLD_RX.length; i++) {
+      var m = String(text).match(HOLD_RX[i]);
+      if (m) return m[0].trim();
+    }
+    return null;
+  }
+
+  function layerHoldInfo(l) {
+    if (!l) return { held: false };
+    if (l.hold === true) return { held: true, source: 'manual', reason: 'marked not enough for a post yet' };
+    if (l.hold === false) return { held: false, overridden: !!holdMatch(l.notes) };
+    var m = holdMatch(l.notes);
+    return m ? { held: true, source: 'note', reason: '“' + m + '”' } : { held: false };
+  }
+
+  /** Is this whole place on hold? Its own flag or notes, or every clip held. */
+  function holdInfo(item) {
+    if (!item) return { held: false };
+    if (item.hold === true) return { held: true, source: 'manual', reason: 'marked not enough for a post yet' };
+    if (item.hold === false) return { held: false, overridden: !!holdMatch(item.notes) };
+    var m = holdMatch(item.notes);
+    if (m) return { held: true, source: 'note', reason: '“' + m + '”' };
+    var live = (item.layers || []).filter(function (l) { return !l.retired; });
+    if (live.length && live.every(function (l) { return layerHoldInfo(l).held; })) {
+      var first = layerHoldInfo(live[0]);
+      return { held: true, source: 'clips', reason: live.length === 1 ? 'its clip is ' + (first.source === 'note' ? 'noted ' + first.reason : 'on hold') : 'every clip is on hold' };
+    }
+    return { held: false };
+  }
+
+  /* ---------- seasons: when a piece of content can post ----------
+     Halloween footage belongs in October, not in March. The tags and name of a
+     place (and the label and tags of each clip) are read for the occasions
+     below. A specific occasion wins over a general season on the same thing,
+     so "fall" + "halloween" means Halloween. A holiday window is the ~3 weeks
+     before the day and ends on it, because that's when people plan for it (a
+     Halloween spot on October 2 is early; on November 2 it's late). Broad
+     seasons (fall, summer) keep their whole run.                            */
+
+  var SEASONS = [
+    { id: 'halloween',    label: 'Halloween',       emoji: '🎃', specific: true,  from: [10, 10], to: [10, 31], rx: /\b(halloween|spooky|haunted|costumes?|trick[- ]or[- ]treat)\b/i },
+    { id: 'thanksgiving', label: 'Thanksgiving',    emoji: '🦃', specific: true,  from: [11, 6],  to: [11, 27], rx: /\b(thanksgiving|friendsgiving)\b/i },
+    { id: 'christmas',    label: 'Christmas',       emoji: '🎄', specific: true,  from: [12, 1],  to: [12, 25], rx: /\b(christmas|xmas|santa|gingerbread|hanukkah|holiday (lights|market|markets|decor|tree|party|parties|gift|gifts|cookies))\b/i },
+    { id: 'nye',          label: "New Year's",      emoji: '🥂', specific: true,  from: [12, 15], to: [12, 31], rx: /\b(new year'?s( eve)?|nye)\b/i },
+    { id: 'valentines',   label: "Valentine's",     emoji: '💘', specific: true,  from: [1, 24],  to: [2, 14],  rx: /\b(valentine'?s?|galentine'?s?)\b/i },
+    { id: 'stpats',       label: "St. Patrick's",   emoji: '☘️', specific: true,  from: [2, 24],  to: [3, 17],  rx: /\b(st\.? patrick'?s?|saint patrick'?s?)\b/i },
+    { id: 'easter',       label: 'Easter',          emoji: '🐣', specific: true,  from: [3, 10],  to: [4, 20],  rx: /\beaster\b/i },
+    { id: 'mothers',      label: "Mother's Day",    emoji: '💐', specific: true,  from: [4, 20],  to: [5, 11],  rx: /\bmother'?s day\b/i },
+    { id: 'fathers',      label: "Father's Day",    emoji: '👔', specific: true,  from: [6, 1],   to: [6, 21],  rx: /\bfather'?s day\b/i },
+    { id: 'july4',        label: 'the Fourth',      emoji: '🎆', specific: true,  from: [6, 13],  to: [7, 4],   rx: /\b(4th of july|fourth of july|july 4(th)?|independence day)\b/i },
+    { id: 'holidays',     label: 'the holidays',    emoji: '🎁', specific: false, from: [11, 1],  to: [12, 31], rx: /\bholidays?\b/i },
+    { id: 'fall',         label: 'fall',            emoji: '🍂', specific: false, from: [9, 15],  to: [11, 30], rx: /\b(fall|autumn|pumpkins?|apple picking|leaf peeping|fall foliage)\b/i },
+    { id: 'winter',       label: 'winter',          emoji: '❄️', specific: false, from: [12, 1],  to: [2, 28],  rx: /\b(winter|snow|snowy)\b/i },
+    { id: 'spring',       label: 'spring',          emoji: '🌸', specific: false, from: [3, 1],   to: [5, 31],  rx: /\b(spring|springtime|cherry blossoms?|dogwoods?)\b/i },
+    { id: 'summer',       label: 'summer',          emoji: '☀️', specific: false, from: [6, 1],   to: [8, 31],  rx: /\b(summer|summertime)\b/i }
+  ];
+  var MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  /** Seasons named in a list of strings. Each string is checked on its own so
+      "seasonal" (a menu) never reads as a season and a hit can be cited. */
+  function seasonsIn(strings) {
+    var hits = [];
+    SEASONS.forEach(function (se) {
+      for (var i = 0; i < strings.length; i++) {
+        var str = strings[i];
+        if (str && se.rx.test(str)) { hits.push({ season: se, from: str }); return; }
+      }
+    });
+    if (hits.some(function (h) { return h.season.specific; })) {
+      hits = hits.filter(function (h) { return h.season.specific; });
+    }
+    return hits;
+  }
+
+  function describeWindows(hits) {
+    return hits.map(function (h) { return h.season.emoji + ' ' + h.season.label; }).join(' + ');
+  }
+
+  /** When a place may post. windows: [{from:[m,d], to:[m,d]}], [] = any time. */
+  function seasonInfo(item) {
+    if (!item) return { windows: [], any: true };
+    if (item.seasonMode === 'any') return { windows: [], any: true, source: 'manual' };
+    if (item.seasonMode === 'months' && (item.seasonMonths || []).length) {
+      var ms = item.seasonMonths.slice().sort(function (a, b) { return a - b; });
+      return {
+        windows: ms.map(function (m) { return { from: [m, 1], to: [m, 31] }; }),
+        any: false, source: 'manual',
+        label: ms.map(function (m) { return MONTH_SHORT[m - 1]; }).join(', ') + ' only'
+      };
+    }
+    var hits = seasonsIn([item.name].concat(item.tags || []));
+    if (!hits.length) return { windows: [], any: true, source: 'auto' };
+    return {
+      windows: hits.map(function (h) { return { from: h.season.from, to: h.season.to }; }),
+      any: false, source: 'auto',
+      label: describeWindows(hits) + ' only',
+      because: hits.map(function (h) { return '“' + h.from + '”'; }).join(', ')
+    };
+  }
+
+  function layerSeasonInfo(l) {
+    var hits = seasonsIn([l.label].concat(l.tags || []));
+    if (!hits.length) return { windows: [], any: true };
+    return {
+      windows: hits.map(function (h) { return { from: h.season.from, to: h.season.to }; }),
+      any: false, label: describeWindows(hits) + ' only',
+      because: hits.map(function (h) { return '“' + h.from + '”'; }).join(', ')
+    };
+  }
+
+  function inWindows(windows, iso) {
+    if (!windows || !windows.length) return true;
+    var md = Number(iso.slice(5, 7)) * 100 + Number(iso.slice(8, 10));
+    return windows.some(function (w) {
+      var a = w.from[0] * 100 + w.from[1], b = w.to[0] * 100 + w.to[1];
+      return a <= b ? (md >= a && md <= b) : (md >= a || md <= b);
+    });
+  }
+
+  /** Clips that can go into a post on this date: live, not on hold, in season. */
+  function usableLayersOn(item, iso) {
+    return (item.layers || []).filter(function (l) {
+      if (l.retired || layerHoldInfo(l).held) return false;
+      return !iso || inWindows(layerSeasonInfo(l).windows, iso);
+    });
+  }
+
+  /** Can this place be in a post that goes up on this date? */
+  function usableOn(item, iso) {
+    if (holdInfo(item).held) return false;
+    if (iso && !inWindows(seasonInfo(item).windows, iso)) return false;
+    return usableLayersOn(item, iso).length > 0;
+  }
+
+  /** Usable on at least one day between two ISO dates (inclusive). */
+  function usableBetween(item, fromIso, toIso) {
+    if (holdInfo(item).held) return false;
+    var d = parseDate(fromIso), end = parseDate(toIso);
+    for (var guard = 0; d <= end && guard < 400; guard++) {
+      if (usableOn(item, isoDate(d))) return true;
+      d.setDate(d.getDate() + 1);
+    }
+    return false;
+  }
+
+  /* ---------- cadence ---------- */
+
+  function cadenceOn() {
+    var ppw = state.settings.postsPerWeek;
+    return !!ppw && PLATFORM_IDS.some(function (p) { return (ppw[p] || 0) > 0; });
+  }
+
+  /** Is the calendar making posts for this platform at all right now? */
+  function platformActive(p) {
+    if (!cadenceOn()) return true;
+    return (state.settings.postsPerWeek[p] || 0) > 0;
+  }
+
+  /** Right home for this place AND a platform you're currently posting to. */
+  function itemPostsOn(item, p) {
+    if (p === 'tiktok' && item && item.photosOnly) return false;   // TikTok needs video
+    return platformActive(p) && itemAllowsPlatform(item, p);
+  }
+
+  /* The weekdays a platform posts on: your chosen days first, then topped up
+     (or trimmed) to the weekly number, filling in the order below. */
+  var FILL_ORDER = [4, 2, 6, 3, 5, 1, 0];   // Thu, Tue, Sat, Wed, Fri, Mon, Sun
+  function slotDays(p) {
+    var ppw = state.settings.postsPerWeek || {};
+    var n = Math.max(0, Math.min(7, ppw[p] || 0));
+    var pref = (state.settings.preferredDays || []).slice();
+    var days = FILL_ORDER.filter(function (d) { return pref.indexOf(d) !== -1; }).slice(0, n);
+    FILL_ORDER.forEach(function (d) { if (days.length < n && days.indexOf(d) === -1) days.push(d); });
+    return days.sort(function (a, b) { return a - b; });
+  }
+
   /* ---------- collections ----------
      A collection is a saved lens on the library: every place in one
      neighborhood, every place carrying a subject tag, or every place of one
@@ -1075,6 +1317,20 @@ window.CJ = window.CJ || {};
   Object.assign(CJ, {
     STORAGE_KEY: STORAGE_KEY,
     TYPES: TYPES,
+    SEASONS: SEASONS,
+    holdMatch: holdMatch,
+    holdInfo: holdInfo,
+    layerHoldInfo: layerHoldInfo,
+    seasonInfo: seasonInfo,
+    layerSeasonInfo: layerSeasonInfo,
+    inWindows: inWindows,
+    usableLayersOn: usableLayersOn,
+    usableOn: usableOn,
+    usableBetween: usableBetween,
+    cadenceOn: cadenceOn,
+    platformActive: platformActive,
+    itemPostsOn: itemPostsOn,
+    slotDays: slotDays,
     matchesCollection: matchesCollection,
     collectionLabel: collectionLabel,
     REUSE: REUSE,
